@@ -1,0 +1,41 @@
+@import "tw-animate-css";
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@keyframes animate-gradient {
+  0% { transform: translateX(0); }
+  50% { transform: translateX(-20px); }
+  100% { transform: translateX(0); }
+}
+
+.animate-gradient {
+  animation: animate-gradient 5s ease-in-out infinite;
+}
+
+:root {
+  --background: #000000;
+  --foreground: #f9fafb;
+  --muted: #e5e7eb;
+  --radius: 0.65rem;
+}
+
+html,
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  transition-property: background-color, color;
+  transition-duration: 300ms;
+}
+
+@theme inline { --radius: var(----radius);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
