@@ -1,7 +1,14 @@
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey, clusterApiUrl, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
-export async function getBalance({ walletPublicKey }) {
-  const conn = new Connection('https://api.devnet.solana.com');
-  const balance = await conn.getBalance(new PublicKey(walletPublicKey));
-  return `${balance / 1e9} SOL`;
-}
+export default async function getBalance({ tokenSymbol, publicKey }) {
+  if (!publicKey) throw new Error("Missing public key");
+  if (tokenSymbol !== 'SOL') throw new Error("Only SOL is supported currently");
+
+  const connection = new Connection(clusterApiUrl("devnet")); // switched to devnet
+  const pubKey = new PublicKey(publicKey);
+  const balance = await connection.getBalance(pubKey);
+  
+  return {
+    balance: (balance / LAMPORTS_PER_SOL).toFixed(4) + " SOL"
+  };
+};
