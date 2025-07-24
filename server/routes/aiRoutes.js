@@ -2,21 +2,28 @@
 import express from 'express';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import dotenv from 'dotenv';
+
+// --- NEW: Import the new tools ---
 import getBalance from '../tools/getBalance.js';
 import send from '../tools/send.js';
-import swapTokens from '../tools/swap.js';
+import swapTokens from '../tools/swapTokens.js';
+import getPortfolio from '../tools/getPortfolio.js';
+import getTokenPrice from '../tools/getTokenPrice.js';
+import getTransactionHistory from '../tools/getTransactionHistory.js';
 
 dotenv.config();
 const router = express.Router();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// --- NEW: Add the new tool definitions ---
 const tools = [
   {
     functionDeclarations: [
+      // Existing tools
       {
         name: 'getBalance',
-        description: 'Get the crypto balance of the connected wallet for a specific token.',
+        description: 'Get the crypto balance for a single, specific token.',
         parameters: {
           type: 'OBJECT',
           properties: {
@@ -30,31 +37,20 @@ const tools = [
       },
       {
         name: 'send',
-        // --- THIS IS THE KEY CHANGE (1/2) ---
-        // Added a direct example in the description to help the model match the prompt.
-        description: 'Use this tool to send cryptocurrency. It prepares a transaction to send a specified amount of a token (like SOL) to a recipient\'s wallet address. For example, handles prompts like "send 1 sol to...".',
+        description: 'Use this tool to send cryptocurrency to another wallet.',
         parameters: {
           type: 'OBJECT',
           properties: {
-            toAddress: {
-              type: 'STRING',
-              description: 'The recipient\'s public wallet address (e.g., "CGJut...33bD").'
-            },
-            amount: {
-              type: 'NUMBER',
-              description: 'The quantity of the token to send (e.g., 0.5, 1, 10).'
-            },
-            tokenSymbol: {
-              type: 'STRING',
-              description: 'The symbol or ticker of the token to send (e.g., "sol", "usdc").'
-            },
+            toAddress: { type: 'STRING', description: 'The recipient\'s public wallet address.' },
+            amount: { type: 'NUMBER', description: 'The quantity of the token to send.' },
+            tokenSymbol: { type: 'STRING', description: 'The symbol of the token to send.' },
           },
           required: ['toAddress', 'amount', 'tokenSymbol'],
         },
       },
       {
         name: 'swapTokens',
-        description: 'Prepares a transaction to swap one token for another on a decentralized exchange.',
+        description: 'Use this tool to swap one cryptocurrency for another.',
         parameters: {
           type: 'OBJECT',
           properties: {
@@ -63,6 +59,39 @@ const tools = [
             amount: { type: 'NUMBER', description: 'The amount of the `fromToken` to swap.' },
           },
           required: ['fromToken', 'toToken', 'amount'],
+        },
+      },
+      // New Information Tools
+      {
+        name: 'getPortfolio',
+        description: 'Get a snapshot of the user\'s balances for major tokens (SOL, USDC, USDT, JUP). Use this for general questions like "what\'s in my wallet?".',
+        parameters: { type: 'OBJECT', properties: {} }, // No parameters needed
+      },
+      {
+        name: 'getTokenPrice',
+        description: 'Get the current USD price of a specific cryptocurrency.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            tokenSymbol: {
+              type: 'STRING',
+              description: 'The symbol of the token to get the price for, e.g., "SOL".'
+            },
+          },
+          required: ['tokenSymbol'],
+        },
+      },
+      {
+        name: 'getTransactionHistory',
+        description: 'Fetch the most recent transaction history for the user\'s wallet.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            limit: {
+              type: 'NUMBER',
+              description: 'The number of recent transactions to fetch. Defaults to 5.'
+            },
+          },
         },
       },
     ],
@@ -96,17 +125,13 @@ router.post('/prompt', async (req, res) => {
     const chat = model.startChat({ history });
     const result = await chat.sendMessageStream(prompt);
 
-    let hasSentData = false; // Flag to check if we've sent any response
+    let hasSentData = false;
 
     for await (const chunk of result.stream) {
-      // --- THIS IS THE KEY CHANGE (2/2) ---
-      // Added detailed logging to your backend terminal.
-      // This will show you exactly what the AI is thinking for every chunk.
       console.log("--- Gemini Chunk Received ---");
       console.log(JSON.stringify(chunk, null, 2));
       console.log("--------------------------");
-
-      hasSentData = true; // Mark that we received something from the AI
+      hasSentData = true;
 
       const chunkText = chunk.text();
       if (chunkText) {
@@ -119,25 +144,38 @@ router.post('/prompt', async (req, res) => {
         const { name, args } = func;
 
         try {
+          // --- THIS IS THE KEY CHANGE ---
+          // When a text-based tool is called, we now add an `isToolResponse` flag.
           if (name === 'getBalance') {
             const result = await getBalance({ ...args, publicKey: walletAddress });
             const resultText = `Your ${args.tokenSymbol} balance is ${result.balance}`;
-            res.write(`data: ${JSON.stringify({ type: 'text', content: resultText })}\n\n`);
+            res.write(`data: ${JSON.stringify({ type: 'text', content: resultText, isToolResponse: true })}\n\n`);
           }
           else if (name === 'send') {
             const txArgs = await send({ ...args, fromAddress: walletAddress });
             res.write(`data: ${JSON.stringify({
               type: 'tool_code',
-              content: {
-                action: 'createAndSendTransaction',
-                args: txArgs,
-              }
+              content: { action: 'createAndSendTransaction', args: txArgs }
             })}\n\n`);
           }
           else if (name === 'swapTokens') {
-            const swap = await swapTokens({ ...args, walletAddress });
-            const resultText = `Swap prepared: ${swap}`;
-            res.write(`data: ${JSON.stringify({ type: 'text', content: resultText })}\n\n`);
+            const { serializedTx } = await swapTokens({ ...args, walletAddress });
+            res.write(`data: ${JSON.stringify({
+              type: 'tool_code',
+              content: { action: 'signAndSendTransaction', base64Tx: serializedTx }
+            })}\n\n`);
+          }
+          else if (name === 'getPortfolio') {
+            const resultText = await getPortfolio({ walletAddress });
+            res.write(`data: ${JSON.stringify({ type: 'text', content: resultText, isToolResponse: true })}\n\n`);
+          }
+          else if (name === 'getTokenPrice') {
+            const resultText = await getTokenPrice(args);
+            res.write(`data: ${JSON.stringify({ type: 'text', content: resultText, isToolResponse: true })}\n\n`);
+          }
+          else if (name === 'getTransactionHistory') {
+            const resultText = await getTransactionHistory({ ...args, walletAddress });
+            res.write(`data: ${JSON.stringify({ type: 'text', content: resultText, isToolResponse: true })}\n\n`);
           }
 
         } catch (toolErr) {

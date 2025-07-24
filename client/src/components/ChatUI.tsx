@@ -7,114 +7,138 @@ import "highlight.js/styles/github-dark.css";
 
 // --- Solana Imports ---
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { Transaction, SystemProgram, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { Transaction, SystemProgram, PublicKey, LAMPORTS_PER_SOL, VersionedTransaction } from '@solana/web3.js';
+import { Buffer } from 'buffer';
+
+// --- NEW: Icon for the tool response card ---
+const ToolIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M15 12c0 1.657-1.343 3-3 3s-3-1.343-3-3 1.343-3 3-3 3 1.343 3 3z"/>
+    <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/>
+  </svg>
+);
+
+// --- NEW: A dedicated component for rendering tool responses ---
+const ToolResponseCard = ({ content }: { content: string }) => (
+  <div className="bg-gray-800 border border-purple-500/50 rounded-xl p-4 max-w-[80%] self-start">
+    <div className="flex items-center gap-2 mb-2">
+      <ToolIcon />
+      <h3 className="font-bold text-purple-300">Tool Executed</h3>
+    </div>
+    <div className="prose prose-invert prose-sm">
+      <ReactMarkdown rehypePlugins={[rehypeHighlight]}>{content}</ReactMarkdown>
+    </div>
+  </div>
+);
+
 
 // --- Type Definitions ---
-// The raw arguments needed to build the transaction on the frontend
-type SendTxArgs = {
-  toAddress: string;
-  amount: number;
-  tokenSymbol: string;
-}
+type SendTxArgs = { toAddress: string; amount: number; tokenSymbol: string; }
+type CreateAndSendContent = { action: 'createAndSendTransaction'; args: SendTxArgs; };
+type SignAndSendContent = { action: 'signAndSendTransaction'; base64Tx: string; };
+type ToolCallResult = CreateAndSendContent | SignAndSendContent;
 
-// The specific action for the frontend to perform
-type CreateAndSendContent = {
-  action: 'createAndSendTransaction';
-  args: SendTxArgs;
+// --- UPDATED: Message state to include a flag for tool responses ---
+type Message = {
+  role: "user" | "model";
+  content: string;
+  isToolResponse?: boolean; // Optional flag
 };
 
-// A union type for any possible tool call result from the backend
-type ToolCallResult = CreateAndSendContent;
-
-// Type for the data chunks coming from the backend stream
+// --- UPDATED: StreamData type to include the new flag ---
 type StreamData =
-  | { type: "text"; content: string }
+  | { type: "text"; content: string; isToolResponse?: boolean; }
   | { type: "error"; content: string }
   | { type: "tool_code"; content: ToolCallResult };
 
 const ChatUI = () => {
-  const [messages, setMessages] = React.useState<
-    { role: "user" | "model"; content: string }[]
-  >([]);
+  const [messages, setMessages] = React.useState<Message[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [inputValue, setInputValue] = React.useState("");
 
-  // --- Solana Wallet Adapter Hooks ---
   const { connection } = useConnection();
   const { publicKey, sendTransaction, connected } = useWallet();
 
-  const addMessage = (role: "user" | "model", content: string) => {
-    setMessages((prev) => [...prev, { role, content }]);
+  // --- UPDATED: addMessage function to handle the new flag ---
+  const addMessage = (role: "user" | "model", content: string, isToolResponse: boolean = false) => {
+    setMessages((prev) => [...prev, { role, content, isToolResponse }]);
   };
 
-  // --- UPDATED: Function to create and sign transactions on the frontend ---
   const handleCreateAndSend = async (toolResult: CreateAndSendContent) => {
     if (!connected || !publicKey || !sendTransaction) {
-      addMessage('model', 'Wallet not connected or transaction sending is not available.');
+      addMessage('model', 'Wallet not connected or transaction sending is not available.', true);
       return;
     }
-
-    const { args } = toolResult;
-    
+    const { args } = toolResult;    
     try {
-      // --- NEW: Pre-flight balance check ---
       const lamportsToSend = args.amount * LAMPORTS_PER_SOL;
       const balance = await connection.getBalance(publicKey);
-      
-      // Add a small buffer for the transaction fee
-      const requiredBalance = lamportsToSend + 5000; // 5000 lamports is the default fee
-
+      const requiredBalance = lamportsToSend + 5000;
       if (balance < requiredBalance) {
-        addMessage('model', `❌ Transaction failed: Insufficient funds. You need at least ${requiredBalance / LAMPORTS_PER_SOL} SOL to complete this transaction, but you only have ${balance / LAMPORTS_PER_SOL} SOL.`);
+        addMessage('model', `❌ Transaction failed: Insufficient funds. You need at least ${requiredBalance / LAMPORTS_PER_SOL} SOL, but you only have ${balance / LAMPORTS_PER_SOL} SOL.`, true);
         return;
       }
-      // --- END of Pre-flight check ---
 
       addMessage('model', `Action required: Please approve the transaction in your wallet to send ${args.amount} ${args.tokenSymbol.toUpperCase()}.`);
       
-      // 1. Build the transaction instruction
       const toPubkey = new PublicKey(args.toAddress);
-      const transferInstruction = SystemProgram.transfer({
-        fromPubkey: publicKey,
-        toPubkey: toPubkey,
-        lamports: lamportsToSend,
-      });
-
-      // 2. Fetch a fresh blockhash right before creating the transaction
-      console.log("Fetching latest blockhash...");
+      const transferInstruction = SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: toPubkey, lamports: lamportsToSend });
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
-      console.log("Blockhash fetched:", blockhash);
-
-      // 3. Create the transaction object with the fresh blockhash
-      const transaction = new Transaction({
-        recentBlockhash: blockhash,
-        feePayer: publicKey,
-      }).add(transferInstruction);
-
-      // 4. Use the wallet adapter to send the transaction
+      const transaction = new Transaction({ recentBlockhash: blockhash, feePayer: publicKey }).add(transferInstruction);
       const signature = await sendTransaction(transaction, connection);
-      addMessage('model', `Transaction sent! Waiting for confirmation... \n\n[View on Solscan](https://solscan.io/tx/${signature}?cluster=devnet)`);
-      
-      // 5. Confirm the transaction (simplified and more robust method)
-      await connection.confirmTransaction({
-        signature,
-        blockhash,
-        lastValidBlockHeight
-      }, 'processed');
-      
-      addMessage('model', `✅ Transaction Confirmed!`);
 
+      addMessage('model', `Transaction sent! Waiting for confirmation... \n\n[View on Solscan](https://solscan.io/tx/${signature}?cluster=devnet)`, true);
+      await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'processed');
+      addMessage('model', `✅ Transaction Confirmed!`, true);
     } catch (err: unknown) {
-      console.error("Transaction failed:", err);
+      console.error("Send transaction failed:", err);
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
-      addMessage('model', `❌ Transaction failed: ${errorMessage}`);
+      addMessage('model', `❌ Transaction failed: ${errorMessage}`, true);
     }
   };
+  
+  const handleSignAndSend = async (toolResult: SignAndSendContent) => {
+    if (!connected || !publicKey || !sendTransaction) {
+      addMessage('model', 'Wallet not connected or transaction sending is not available.', true);
+      return;
+    }
+    addMessage('model', `Action required: Please approve the swap transaction in your wallet.`);
+    try {
+      const transactionBuffer = Buffer.from(toolResult.base64Tx, 'base64');
+      const transaction = VersionedTransaction.deserialize(transactionBuffer);
+      const signature = await sendTransaction(transaction, connection);
+
+      addMessage('model', `Swap transaction sent! Waiting for confirmation... \n\n[View on Solscan](https://solscan.io/tx/${signature}?cluster=devnet)`, true);
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
+      await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'processed');
+      addMessage('model', `✅ Swap Confirmed!`, true);
+    } catch (err: unknown) {
+      console.error("Swap transaction failed:", err);
+      let errorMessage = "An unexpected error occurred. Please check the browser console for details.";
+      if (err instanceof Error) {
+        if (err.message.includes("reverted during simulation")) {
+          errorMessage = "The wallet blocked this swap because it is likely invalid for the Devnet. This can happen with certain token pairs when testing.";
+        } else if (err.message.includes("User rejected")) {
+          errorMessage = "You cancelled the transaction in your wallet.";
+        } else {
+          errorMessage = err.message;
+        }
+      } else {
+        try {
+          errorMessage = `An unknown error object was received: ${JSON.stringify(err)}`;
+        } catch {
+          errorMessage = "An unknown and non-serializable error occurred.";
+        }
+      }
+      addMessage('model', `❌ Swap failed: ${errorMessage}`, true);
+    }
+  };
+
 
   const sendPrompt = async (value: string) => {
     if (!value.trim()) return;
     if (!connected || !publicKey) {
-      addMessage("model", "Please connect your wallet.");
+      addMessage("model", "Please connect your wallet.", true);
       return;
     }
 
@@ -130,8 +154,6 @@ const ChatUI = () => {
     }));
 
     try {
-      // --- THIS IS THE KEY CHANGE ---
-      // Corrected the port to 8080 to match your likely server configuration.
       const res = await fetch("http://localhost:8080/api/prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -142,12 +164,9 @@ const ChatUI = () => {
         }),
       });
 
-      // --- NEW: Added error handling for bad HTTP responses ---
       if (!res.ok) {
         throw new Error(`Server responded with ${res.status}: ${res.statusText}`);
       }
-      // --- END of new error handling ---
-
       if (!res.body) throw new Error("No response body");
 
       const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -164,20 +183,28 @@ const ChatUI = () => {
           try {
             const data: StreamData = JSON.parse(jsonString);
 
+            // --- THIS IS THE KEY FIX ---
+            // Removed the incorrect guessing logic and now rely on the flag from the backend.
             if (data.type === "text") {
               currentModelMessage += data.content;
               setMessages((prev) => {
                 const updated = [...prev];
-                updated[updated.length - 1].content = currentModelMessage;
+                const lastMsg = updated[updated.length - 1];
+                lastMsg.content = currentModelMessage;
+                // Only set the flag if the backend explicitly provides it.
+                if (data.isToolResponse) {
+                    lastMsg.isToolResponse = true;
+                }
                 return updated;
               });
             } else if (data.type === "tool_code") {
-              // When a tool_code message arrives, call the new handler function
               if (data.content.action === 'createAndSendTransaction') {
                 handleCreateAndSend(data.content);
+              } else if (data.content.action === 'signAndSendTransaction') {
+                handleSignAndSend(data.content);
               }
             } else if (data.type === "error") {
-              addMessage("model", `[Error]: ${data.content}`);
+              addMessage("model", `[Error]: ${data.content}`, true);
             }
           } catch (e) {
             console.error("Stream parse error:", e);
@@ -186,7 +213,7 @@ const ChatUI = () => {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      addMessage("model", `API error: ${msg}`);
+      addMessage("model", `API error: ${msg}`, true);
     } finally {
       setLoading(false);
     }
@@ -204,16 +231,22 @@ const ChatUI = () => {
       <div
         className={`w-full max-w-4xl flex flex-col gap-3 px-4 py-6 overflow-y-auto custom-scrollbar transition-all ${hasMessages ? "h-[calc(100vh-120px)] mb-28" : "h-0 overflow-hidden"}`}
       >
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`max-w-[80%] rounded-xl p-3 whitespace-pre-wrap text-sm ${msg.role === "user" ? "self-end bg-purple-700 text-white" : "self-start bg-gray-200 text-black dark:bg-[#444] dark:text-white"}`}
-          >
-            <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
-              {msg.content}
-            </ReactMarkdown>
-          </div>
-        ))}
+        {messages.map((msg, i) => {
+          // --- UPDATED: Conditional rendering logic ---
+          if (msg.isToolResponse) {
+            return <ToolResponseCard key={i} content={msg.content} />;
+          }
+          return (
+            <div
+              key={i}
+              className={`max-w-[80%] rounded-xl p-3 whitespace-pre-wrap text-sm ${msg.role === "user" ? "self-end bg-purple-700 text-white" : "self-start bg-gray-200 text-black dark:bg-[#444] dark:text-white"}`}
+            >
+              <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
+                {msg.content}
+              </ReactMarkdown>
+            </div>
+          );
+        })}
         {loading && (
           <div className="self-start flex items-center gap-2">
             <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
@@ -239,116 +272,3 @@ const ChatUI = () => {
 };
 
 export default ChatUI;
-
-// import { PromptBox } from "./ui/chatgpt-prompt-input";
-// import React from "react";
-// import ReactMarkdown from "react-markdown";
-// import rehypeHighlight from 'rehype-highlight';
-// import 'highlight.js/styles/github.css';
-// import { useWallet } from "@solana/wallet-adapter-react";
-
-// const ChatUI = () => {
-//   const [messages, setMessages] = React.useState<{ role: "user" | "ai"; content: string }[]>([]);
-//   const [loading, setLoading] = React.useState(false);
-//   const [inputValue, setInputValue] = React.useState("");
-//   const { publicKey } = useWallet();
-
-//   const sendPrompt = async (value: string) => {
-//     if (!value.trim()) return;
-
-//     if (!publicKey) {
-//       alert("Please connect your wallet first.");
-//       return;
-//     }
-
-//     const fullPrompt = `${value}\n\n[walletPublicKey: ${publicKey.toString()}]`;
-
-//     const userMessage = { role: "user" as const, content: value };
-//     setMessages((prev) => [...prev, userMessage]);
-//     setLoading(true);
-
-//     try {
-//       const res = await fetch("http://localhost:8080/api/chat", {
-//         method: "POST",
-//         headers: { "Content-Type": "application/json" },
-//         body: JSON.stringify({
-//           prompt: fullPrompt,
-//         }),
-//       });
-
-//       const reader = res.body?.getReader();
-//       const decoder = new TextDecoder("utf-8");
-//       let aiMessage = "";
-
-//       while (true) {
-//         const { done, value: chunk } = await reader?.read() ?? {};
-//         if (done) break;
-//         aiMessage += decoder.decode(chunk);
-//         setMessages((prev) => {
-//           const newMessages = [...prev];
-//           if (newMessages[prev.length - 1]?.role === "ai") {
-//             newMessages[prev.length - 1].content = aiMessage;
-//           } else {
-//             newMessages.push({ role: "ai", content: aiMessage });
-//           }
-//           return [...newMessages];
-//         });
-//       }
-//     } catch (err) {
-//       console.error("Streaming error:", err);
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
-
-//   const hasMessages = messages.length > 0;
-
-//   return (
-//     <div className="w-full h-screen flex flex-col items-center">
-//       {!hasMessages && (
-//         <p className="text-center text-3xl text-foreground mt-20">
-//           How Can I Help You
-//         </p>
-//       )}
-
-//       {/* Messages display */}
-//       <div
-//         className={`w-full max-w-4xl flex flex-col gap-3 px-4 py-6 overflow-y-auto custom-scrollbar transition-all
-//         ${hasMessages ? "h-[calc(100vh-120px)] mb-28" : "h-0 overflow-hidden"}`}
-//       >
-//         {messages.map((msg, i) => (
-//           <div
-//             key={i}
-//             className={
-//               "max-w-[80%] rounded-xl p-3 whitespace-pre-wrap text-sm " +
-//               (msg.role === "user"
-//                 ? "self-end bg-black text-white dark:bg-[#1a1a1a]"
-//                 : "self-start bg-gray-200 text-black dark:bg-[#444] dark:text-white")
-//             }
-//           >
-//             <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
-//               {msg.content}
-//             </ReactMarkdown>
-//           </div>
-//         ))}
-//       </div>
-
-//       {/* PromptBox */}
-//       <div
-//         className={`w-full px-4 max-w-4xl transition-all ${hasMessages
-//           ? "fixed bottom-4 left-1/2 -translate-x-1/2"
-//           : "flex-1 flex items-center justify-center"
-//           }`}
-//       >
-//         <PromptBox
-//           onSubmitPrompt={sendPrompt}
-//           loading={loading}
-//           value={inputValue}
-//           setValue={setInputValue}
-//         />
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default ChatUI;
