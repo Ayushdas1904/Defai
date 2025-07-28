@@ -114,6 +114,10 @@ router.post('/prompt', async (req, res) => {
     const model = genAI.getGenerativeModel({
       model: 'gemini-1.5-flash-latest',
       tools,
+      // --- THIS IS THE KEY CHANGE ---
+      // The instruction is now less strict, allowing for general crypto questions.
+      systemInstruction: "You are a helpful AI assistant specializing in DeFi and cryptocurrency, with a focus on the Solana ecosystem. Your primary role is to help users manage their crypto assets using the provided tools. You can answer questions about DeFi, blockchain technology, and specific cryptocurrencies. However, you must politely decline to answer questions that are completely unrelated to finance, cryptocurrency, or technology, such as questions about movies, history, or personal opinions.",
+      // --- END OF KEY CHANGE ---
       safetySettings: [
         { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
         { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
