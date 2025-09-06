@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio";
 import { z } from "zod";
-import { Connection, PublicKey, Transaction, SystemProgram, sendAndConfirmTransaction } from "@solana/web3.js";
+import { Connection, PublicKey, Transaction, SystemProgram, sendAndConfirmTransaction, clusterApiUrl } from "@solana/web3.js";
 
 // Create your Solana connection (devnet/mainnet as needed)
-const connection = new Connection("https://api.devnet.solana.com");
+const connection = new Connection(clusterApiUrl(process.env.SOLANA_NETWORK ), "confirmed");
 
 const server = new McpServer();
 

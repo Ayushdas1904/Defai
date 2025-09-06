@@ -1,35 +1,61 @@
-// tools/getPortfolio.js
-import getBalance from './getBalance.js'; // We will reuse your existing getBalance tool.
+// getPortfolio.js
 
-// A predefined list of common tokens to check for a portfolio snapshot.
-const TOKENS_TO_CHECK = ['SOL', 'USDC', 'USDT', 'JUP'];
+let TOKEN_CACHE = null;
+
+async function fetchTokenList() {
+  if (TOKEN_CACHE) return TOKEN_CACHE;
+
+  const response = await fetch("https://token.jup.ag/all");
+  const tokens = await response.json();
+
+  TOKEN_CACHE = {};
+  tokens.forEach((t) => {
+    TOKEN_CACHE[t.address] = { symbol: t.symbol, name: t.name };
+  });
+
+  return TOKEN_CACHE;
+}
 
 export default async function getPortfolio({ walletAddress }) {
   console.log("💼 getPortfolio.js called with:", { walletAddress });
   try {
-    let portfolioText = "Here's a snapshot of your portfolio:\n\n";
+    const [balanceRes, tokenMap] = await Promise.all([
+      fetch(
+        `https://api.helius.xyz/v0/addresses/${walletAddress}/balances?api-key=${process.env.HELIUS_API_KEY}`
+      ).then((r) => r.json()),
+      fetchTokenList()
+    ]);
+
+    let portfolioText = "📊 Here's a snapshot of your portfolio:\n\n";
     let foundTokens = 0;
-    
-    // Loop through our list of tokens and get the balance for each one.
-    for (const token of TOKENS_TO_CHECK) {
-      try {
-        const result = await getBalance({ publicKey: walletAddress, tokenSymbol: token });
-        // Only display tokens where the user has a balance greater than 0.
-        if (result.balance > 0) {
-          portfolioText += `* **${token}:** ${result.balance.toFixed(4)}\n`;
-          foundTokens++;
-        }
-      } catch (e) {
-        // This will often fail if the user doesn't have a token account for a specific token.
-        // We can safely ignore these errors for a portfolio snapshot.
-        console.log(`Could not get balance for ${token}, likely no token account exists.`);
+
+    // ✅ Add Native SOL balance
+    if (balanceRes.nativeBalance) {
+      const sol = balanceRes.nativeBalance / 1e9; // lamports → SOL
+      if (sol > 0) {
+        portfolioText += `* **SOL** (Solana): ${sol}\n`;
+        foundTokens++;
       }
     }
 
-    if (foundTokens === 0) {
-        return "I couldn't find any balances for SOL, USDC, USDT, or JUP in your wallet.";
+    // ✅ Add SPL tokens
+    if (balanceRes.tokens && balanceRes.tokens.length > 0) {
+      balanceRes.tokens.forEach((token) => {
+        const amount = token.amount / Math.pow(10, token.decimals || 0);
+        if (amount > 0) {
+          const tokenMeta = tokenMap[token.mint] || {};
+          const symbol = tokenMeta.symbol || token.symbol || token.mint;
+          const name = tokenMeta.name || "";
+          portfolioText += `* **${symbol}** (${name}): ${amount}\n`;
+          foundTokens++;
+        }
+      });
     }
-    
+
+    if (foundTokens === 0) {
+      return "I couldn’t find any tokens in your wallet.";
+    }
+
     return portfolioText;
   } catch (error) {
     console.error("🔥 getPortfolio.js failed:", error.message);

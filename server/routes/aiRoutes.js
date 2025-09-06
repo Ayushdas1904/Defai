@@ -64,8 +64,8 @@ const tools = [
       // New Information Tools
       {
         name: 'getPortfolio',
-        description: 'Get a snapshot of the user\'s balances for major tokens (SOL, USDC, USDT, JUP). Use this for general questions like "what\'s in my wallet?".',
-        parameters: { type: 'OBJECT', properties: {} }, // No parameters needed
+        description: 'Get a snapshot of all the tokens and balances in the user\'s wallet using the Helius API. Use this for general questions like "what\'s in my wallet?".',
+        parameters: { type: 'OBJECT', properties: {} }, // no input needed, wallet is passed automatically
       },
       {
         name: 'getTokenPrice',
@@ -191,8 +191,8 @@ router.post('/prompt', async (req, res) => {
     }
 
     if (!hasSentData) {
-        console.log("Warning: Gemini stream finished without sending any text or tool calls.");
-        res.write(`data: ${JSON.stringify({ type: 'text', content: "I'm not sure how to handle that request. Could you please rephrase it?" })}\n\n`);
+      console.log("Warning: Gemini stream finished without sending any text or tool calls.");
+      res.write(`data: ${JSON.stringify({ type: 'text', content: "I'm not sure how to handle that request. Could you please rephrase it?" })}\n\n`);
     }
 
   } catch (error) {

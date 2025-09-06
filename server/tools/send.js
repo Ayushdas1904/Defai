@@ -1,11 +1,13 @@
 import {
+  clusterApiUrl,
   Connection,
   PublicKey,
   SystemProgram,
   Transaction,
 } from "@solana/web3.js";
 
-const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+const network = process.env.SOLANA_NETWORK;
+const connection = new Connection(clusterApiUrl(network), "confirmed");
 
 export default async function send({ fromAddress, toAddress, amount, tokenSymbol }) {
   try {
@@ -14,10 +16,10 @@ export default async function send({ fromAddress, toAddress, amount, tokenSymbol
     if (!fromAddress || !toAddress || !amount || !tokenSymbol) {
       throw new Error("❌ Missing required fields");
     }
-    
+
     // You can perform basic validation here.
     if (tokenSymbol.toLowerCase() !== 'sol') {
-        throw new Error("This agent currently only supports sending SOL.");
+      throw new Error("This agent currently only supports sending SOL.");
     }
 
     console.log("✅ Arguments validated by backend.");

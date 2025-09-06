@@ -1,8 +1,9 @@
 // tools/getTransactionHistory.js
-import { Connection, PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
 
-// Connect to the same network your app is using (devnet).
-const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+// Connect to the same network your app is using from environment variable.
+const network = process.env.SOLANA_NETWORK || "mainnet-beta";
+const connection = new Connection(clusterApiUrl(network), "confirmed");
 
 export default async function getTransactionHistory({ walletAddress, limit = 5 }) {
   console.log("📜 getTransactionHistory.js called with:", { walletAddress, limit });
@@ -20,7 +21,7 @@ export default async function getTransactionHistory({ walletAddress, limit = 5 }
     signatures.forEach((sigInfo, index) => {
       const signature = sigInfo.signature;
       const shortSig = `${signature.slice(0, 6)}...${signature.slice(-6)}`;
-      historyText += `${index + 1}. [${shortSig}](https://solscan.io/tx/${signature}?cluster=devnet)\n`;
+      historyText += `${index + 1}. [${shortSig}](https://solscan.io/tx/${signature})\n`;
     });
 
     return historyText;

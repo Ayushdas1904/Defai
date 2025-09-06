@@ -24,8 +24,11 @@ export const useChatLogic = () => {
     }
     const { args } = toolResult;    
     try {
-      const lamportsToSend = args.amount * LAMPORTS_PER_SOL;
+      const lamportsToSend = Number(args.amount) * LAMPORTS_PER_SOL;
       const balance = await connection.getBalance(publicKey);
+      console.log("Wallet:", publicKey.toBase58());
+      console.log("Cluster balance (in SOL):", balance / LAMPORTS_PER_SOL);
+
       const requiredBalance = lamportsToSend + 5000;
       if (balance < requiredBalance) {
         addMessage('model', `❌ Transaction failed: Insufficient funds. You need at least ${requiredBalance / LAMPORTS_PER_SOL} SOL, but you only have ${balance / LAMPORTS_PER_SOL} SOL.`, true);
@@ -37,7 +40,7 @@ export const useChatLogic = () => {
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
       const transaction = new Transaction({ recentBlockhash: blockhash, feePayer: publicKey }).add(transferInstruction);
       const signature = await sendTransaction(transaction, connection);
-      addMessage('model', `Transaction sent! Waiting for confirmation... \n\n[View on Solscan](https://solscan.io/tx/${signature}?cluster=devnet)`, true);
+      addMessage('model', `Transaction sent! Waiting for confirmation... \n\n[View on Solscan](https://solscan.io/tx/${signature})`, true);
       await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'processed');
       addMessage('model', `✅ Transaction Confirmed!`, true);
     } catch (err: unknown) {
@@ -56,14 +59,14 @@ export const useChatLogic = () => {
       const transactionBuffer = Buffer.from(toolResult.base64Tx, 'base64');
       const transaction = VersionedTransaction.deserialize(transactionBuffer);
       const signature = await sendTransaction(transaction, connection);
-      addMessage('model', `Swap transaction sent! Waiting for confirmation... \n\n[View on Solscan](https://solscan.io/tx/${signature}?cluster=devnet)`, true);
+      addMessage('model', `Swap transaction sent! Waiting for confirmation... \n\n[View on Solscan](https://solscan.io/tx/${signature})`, true);
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
       await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'processed');
       addMessage('model', `✅ Swap Confirmed!`, true);
     } catch (err: unknown) {
       let errorMessage = "An unexpected error occurred.";
       if (err instanceof Error) {
-        if (err.message.includes("reverted during simulation")) errorMessage = "The wallet blocked this swap because it is likely invalid for the Devnet.";
+        if (err.message.includes("reverted during simulation")) errorMessage = "The wallet blocked this swap because it is likely invalid for the Mainnet.";
         else if (err.message.includes("User rejected")) errorMessage = "You cancelled the transaction in your wallet.";
         else errorMessage = err.message;
       }
