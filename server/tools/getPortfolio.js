@@ -1,35 +1,40 @@
-// getPortfolio.js
+// tools/getPortfolio.js
+import fetch from "cross-fetch";
 
-let TOKEN_CACHE = null;
-
-async function fetchTokenList() {
-  if (TOKEN_CACHE) return TOKEN_CACHE;
-
-  const response = await fetch("https://token.jup.ag/all");
-  const tokens = await response.json();
-
-  TOKEN_CACHE = {};
-  tokens.forEach((t) => {
-    TOKEN_CACHE[t.address] = { symbol: t.symbol, name: t.name };
-  });
-
-  return TOKEN_CACHE;
+async function fetchTokenMetaFromDexScreener(mintAddress) {
+  try {
+    const res = await fetch(
+      `https://api.dexscreener.com/latest/dex/tokens/${mintAddress}`
+    );
+    if (!res.ok) {
+      throw new Error(`DexScreener failed: ${res.status}`);
+    }
+    const data = await res.json();
+    if (data.pairs && data.pairs.length > 0) {
+      const pair = data.pairs[0];
+      return {
+        symbol: pair.baseToken?.symbol || mintAddress,
+        name: pair.baseToken?.name || "",
+      };
+    }
+    return { symbol: mintAddress, name: "" };
+  } catch (err) {
+    console.warn(`DexScreener lookup failed for ${mintAddress}:`, err.message);
+    return { symbol: mintAddress, name: "" };
+  }
 }
 
 export default async function getPortfolio({ walletAddress }) {
   console.log("💼 getPortfolio.js called with:", { walletAddress });
   try {
-    const [balanceRes, tokenMap] = await Promise.all([
-      fetch(
-        `https://api.helius.xyz/v0/addresses/${walletAddress}/balances?api-key=${process.env.HELIUS_API_KEY}`
-      ).then((r) => r.json()),
-      fetchTokenList()
-    ]);
+    const balanceRes = await fetch(
+      `https://api.helius.xyz/v0/addresses/${walletAddress}/balances?api-key=${process.env.HELIUS_API_KEY}`
+    ).then((r) => r.json());
 
     let portfolioText = "📊 Here's a snapshot of your portfolio:\n\n";
     let foundTokens = 0;
 
-    // ✅ Add Native SOL balance
+    // ✅ Native SOL balance
     if (balanceRes.nativeBalance) {
       const sol = balanceRes.nativeBalance / 1e9; // lamports → SOL
       if (sol > 0) {
@@ -38,18 +43,16 @@ export default async function getPortfolio({ walletAddress }) {
       }
     }
 
-    // ✅ Add SPL tokens
+    // ✅ SPL tokens
     if (balanceRes.tokens && balanceRes.tokens.length > 0) {
-      balanceRes.tokens.forEach((token) => {
+      for (const token of balanceRes.tokens) {
         const amount = token.amount / Math.pow(10, token.decimals || 0);
         if (amount > 0) {
-          const tokenMeta = tokenMap[token.mint] || {};
-          const symbol = tokenMeta.symbol || token.symbol || token.mint;
-          const name = tokenMeta.name || "";
-          portfolioText += `* **${symbol}** (${name}): ${amount}\n`;
+          const meta = await fetchTokenMetaFromDexScreener(token.mint);
+          portfolioText += `* **${meta.symbol}** (${meta.name}): ${amount}\n`;
           foundTokens++;
         }
-      });
+      }
     }
 
     if (foundTokens === 0) {
