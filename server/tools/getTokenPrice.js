@@ -1,7 +1,7 @@
 // tools/getTokenPrice.js
 import fetch from "cross-fetch";
 
-// --- Search by name/symbol ---
+// --- Search by name/symbol on DexScreener ---
 async function resolveMintFromDexScreener(query) {
   console.log(`🔎 Searching DexScreener for "${query}"...`);
   const response = await fetch(
@@ -20,13 +20,14 @@ async function resolveMintFromDexScreener(query) {
   )[0];
 
   return {
-    mintAddress: pair.baseToken?.address,
+    mintAddress: pair.baseToken?.address || pair.baseToken?.id,
     symbol: pair.baseToken?.symbol || query,
+    name: pair.baseToken?.name || query,
   };
 }
 
 // --- Get price from DexScreener using mint ---
-async function fetchFromDexScreener(mintAddress, tokenSymbol) {
+async function fetchFromDexScreener(mintAddress, tokenSymbol, tokenName) {
   const response = await fetch(
     `https://api.dexscreener.com/latest/dex/tokens/${mintAddress}`
   );
@@ -41,11 +42,11 @@ async function fetchFromDexScreener(mintAddress, tokenSymbol) {
   const pair = data.pairs.sort(
     (a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0)
   )[0];
-  const price = parseFloat(pair.priceUsd);
 
+  const price = parseFloat(pair.priceUsd);
   if (!price) throw new Error(`Price not found for ${tokenSymbol}`);
 
-  return `💰 The current price of ${pair.baseToken.symbol} is $${price.toFixed(6)}.`;
+  return `💰 The current price of **${tokenSymbol}** (${tokenName}) is $${price.toFixed(6)}.`;
 }
 
 // --- Main function ---
@@ -54,10 +55,10 @@ export default async function getTokenPrice({ tokenSymbol }) {
 
   try {
     // Step 1: Resolve symbol/name → mint
-    const { mintAddress, symbol } = await resolveMintFromDexScreener(tokenSymbol);
+    const { mintAddress, symbol, name } = await resolveMintFromDexScreener(tokenSymbol);
 
     // Step 2: Fetch price by mint
-    return await fetchFromDexScreener(mintAddress, symbol);
+    return await fetchFromDexScreener(mintAddress, symbol, name);
   } catch (error) {
     console.error("🔥 getTokenPrice.js failed:", error.message);
     return `❌ Failed to fetch price for ${tokenSymbol}: ${error.message}`;
