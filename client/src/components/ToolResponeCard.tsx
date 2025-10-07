@@ -10,23 +10,21 @@ const ToolIcon = ({ toolName }: { toolName: string }) => {
     'Token Price': '📈',
     'Transaction History': '📜',
     'Transaction Status': '✅',
+    'Trigger Order': '🎯',
     'Error': '❌',
   };
   return <span className="text-xl">{icons[toolName] || '⚙️'}</span>;
 };
 
-// This new component parses the text content to create the structured UI
 export const ToolResponseCard = ({ content }: { content: string }) => {
   const [showFullResult, setShowFullResult] = React.useState(false);
 
-  // This function tries to identify the tool and extract data from the raw text string
   const parseContent = () => {
-    // Default values
     let toolName = "Agent Response";
     let status = "Completed";
     let mainContent = content;
 
-    // Check for Balance
+    // 🔹 Balance
     const balanceMatch = content.match(/Your (.*) balance is (.*)/);
     if (balanceMatch) {
       toolName = "Check Balance";
@@ -34,40 +32,62 @@ export const ToolResponseCard = ({ content }: { content: string }) => {
       mainContent = `**${balanceMatch[2]}**`;
     }
 
-    // Check for Token Price
-    const priceMatch = content.match(/The current price of (.*) is \$(.*)\./);
+    // 🔹 Token Price
+    const priceMatch = content.match(/The current price of (.*) is \$(.*)\.?/);
     if (priceMatch) {
       toolName = "Token Price";
       status = "Data retrieved successfully";
       mainContent = `**$${priceMatch[2]}**`;
     }
     
-    // Check for Portfolio
+    // 🔹 Portfolio
     if (content.startsWith("Here's a snapshot")) {
-        toolName = "Portfolio Snapshot";
-        status = "Data retrieved successfully";
-        mainContent = content.replace("Here's a snapshot of your portfolio:\n\n", "");
+      toolName = "Portfolio Snapshot";
+      status = "Data retrieved successfully";
+      mainContent = content.replace("Here's a snapshot of your portfolio:\n\n", "");
     }
     
-    // Check for Transaction History
+    // 🔹 Transaction History
     if (content.startsWith("Here are your most recent")) {
-        toolName = "Transaction History";
-        status = "Data retrieved successfully";
-        mainContent = content.replace("Here are your most recent transactions:\n\n", "");
+      toolName = "Transaction History";
+      status = "Data retrieved successfully";
+      mainContent = content.replace("Here are your most recent transactions:\n\n", "");
     }
     
-    // Check for Transaction Confirmation
+    // 🔹 Transaction Confirmation
     if (content.includes("Transaction Confirmed")) {
-        toolName = "Transaction Status";
-        status = "Transaction Confirmed";
-        mainContent = "The transaction was successfully confirmed on the network.";
+      toolName = "Transaction Status";
+      status = "Transaction Confirmed";
+      mainContent = "The transaction was successfully confirmed on the network.";
+    }
+
+    // 🔹 Trigger Orders (Create / Cancel / Get / Execute)
+    if (content.startsWith("✅ Trigger order created")) {
+      toolName = "Trigger Order";
+      status = "Order created successfully";
+      mainContent = content.replace("✅ Trigger order created: ", "");
+    }
+    if (content.startsWith("🛑 Trigger order cancelled")) {
+      toolName = "Trigger Order";
+      status = "Order cancelled";
+      mainContent = content.replace("🛑 Trigger order cancelled: ", "");
+    }
+    if (content.startsWith("📋 Your trigger orders")) {
+      toolName = "Trigger Order";
+      status = "Fetched trigger orders";
+      mainContent = content.replace("📋 Your trigger orders:\n\n", "");
+    }
+    if (content.startsWith("🚀 Trigger order executed")) {
+      toolName = "Trigger Order";
+      status = "Order executed";
+      mainContent = content.replace("🚀 Trigger order executed: ", "");
     }
     
-    // Check for failures
+    // 🔹 Errors
     if (content.startsWith("❌")) {
-        toolName = "Error";
-        status = "An error occurred";
-        mainContent = content.replace("❌ ", "");
+      toolName = "Error";
+      status = "An error occurred";
+      mainContent = content.replace("❌ ", "");
     }
 
     return { toolName, status, mainContent };
@@ -82,17 +102,16 @@ export const ToolResponseCard = ({ content }: { content: string }) => {
           <ToolIcon toolName={toolName} />
           <div>
             <h3 className="font-bold text-white">{toolName}</h3>
-            <p className={`text-sm ${status.includes("Error") || status.includes("failed") ? "text-red-400" : "text-green-400"}`}>{status}</p>
+            <p className={`text-sm ${status.includes("Error") || status.includes("failed") ? "text-red-400" : "text-green-400"}`}>
+              {status}
+            </p>
           </div>
         </div>
-        {/* <button className="text-sm text-gray-400 border border-gray-600 px-3 py-1 rounded-lg hover:bg-gray-800">
-          Data Query
-        </button> */}
       </div>
       
       {mainContent && (
         <div className="mt-4 text-white pl-10">
-            <ReactMarkdown>{mainContent}</ReactMarkdown>
+          <ReactMarkdown>{mainContent}</ReactMarkdown>
         </div>
       )}
 
