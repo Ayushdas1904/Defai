@@ -1,12 +1,13 @@
 // tools/triggerOrder.js
 import fetch from "node-fetch";
 
-// Example helper: Token symbol → mint address mapping (you can expand this)
-const tokenMints = {
-  SOL: "So11111111111111111111111111111111111111112",
-  USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-  USDT: "Es9vMFrzaCERGGGFhPqGhPuVjApbK9wq92B4YXm7wjC7",
-  BONK: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+// Token symbol → mint address and decimals mapping
+const KNOWN_TOKENS = {
+  SOL: { mint: "So11111111111111111111111111111111111111112", decimals: 9 },
+  USDC: { mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6 },
+  USDT: { mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6 },
+  BONK: { mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", decimals: 5 },
+  JUP: { mint: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN", decimals: 6 },
 };
 
 // Search for token mint using Dexscreener API
@@ -27,33 +28,35 @@ async function searchTokenMint(tokenSymbol) {
   }
 }
 
+// Get token info (mint + decimals)
+async function getTokenInfo(tokenSymbol) {
+  const upper = tokenSymbol.toUpperCase();
+  if (KNOWN_TOKENS[upper]) return KNOWN_TOKENS[upper];
+
+  const mint = await searchTokenMint(tokenSymbol);
+  return { mint, decimals: 6 }; // default 6 decimals if unknown
+}
+
+// Convert amount from units back to human-readable format
+function convertFromUnits(amount, decimals) {
+  return amount / Math.pow(10, decimals);
+}
+
 export async function getMintAddress(symbolOrMint) {
   // If it looks like a mint address (44 characters), return as-is
   if (symbolOrMint && symbolOrMint.length === 44) {
     return symbolOrMint;
   }
 
-  const upperSymbol = symbolOrMint?.toUpperCase();
-
-  // Check local mapping first (faster)
-  if (tokenMints[upperSymbol]) {
-    return tokenMints[upperSymbol];
-  }
-
-  // If not found locally, search via API
   try {
-    const mintAddress = await searchTokenMint(symbolOrMint);
-
-    // Cache the result for future use
-    tokenMints[upperSymbol] = mintAddress;
-
-    return mintAddress;
+    const tokenInfo = await getTokenInfo(symbolOrMint);
+    return tokenInfo.mint;
   } catch (error) {
     throw new Error(`Unknown token: ${symbolOrMint}. ${error.message}`);
   }
 }
 
-// Update createTriggerOrder to use async getMintAddress
+// Update createTriggerOrder to use async getMintAddress and handle decimals
 async function createTriggerOrder({
   walletAddress,
   fromMint,
@@ -64,19 +67,23 @@ async function createTriggerOrder({
   expiryUnix = null,
   wrapAndUnwrapSol = true,
 }) {
-  // Resolve mint addresses
-  const resolvedFromMint = await getMintAddress(fromMint);
-  const resolvedToMint = await getMintAddress(toMint);
+  // Get token info for both tokens to get mint addresses and decimals
+  const fromTokenInfo = await getTokenInfo(fromMint);
+  const toTokenInfo = await getTokenInfo(toMint);
+
+  // Convert amounts to proper decimal units
+  const makerAmountUnits = Math.round(makerAmount * Math.pow(10, fromTokenInfo.decimals));
+  const takerAmountUnits = Math.round(takerAmount * Math.pow(10, toTokenInfo.decimals));
 
   const url = "https://lite-api.jup.ag/trigger/v1/createOrder";
   const body = {
-    inputMint: resolvedFromMint,
-    outputMint: resolvedToMint,
+    inputMint: fromTokenInfo.mint,
+    outputMint: toTokenInfo.mint,
     maker: walletAddress,
     payer: walletAddress,
     params: {
-      makingAmount: makerAmount.toString(),
-      takingAmount: takerAmount.toString(),
+      makingAmount: makerAmountUnits.toString(),
+      takingAmount: takerAmountUnits.toString(),
       //Jupiter API expects slippageBps as a string
       slippageBps: String(slippageBps),
       ...(expiryUnix ? { expiredAtUnix: expiryUnix } : {}),
@@ -152,4 +159,5 @@ export {
   executeTriggerOrder,
   cancelTriggerOrder,
   getTriggerOrders,
+  convertFromUnits,
 };
