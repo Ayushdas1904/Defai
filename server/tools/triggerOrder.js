@@ -77,10 +77,10 @@ async function createTriggerOrder({
     params: {
       makingAmount: makerAmount.toString(),
       takingAmount: takerAmount.toString(),
-      slippageBps: slippageBps,
+      //Jupiter API expects slippageBps as a string
+      slippageBps: String(slippageBps),
       ...(expiryUnix ? { expiredAtUnix: expiryUnix } : {}),
     },
-    wrapAndUnwrapSol,
     computeUnitPrice: "auto",
   };
 
@@ -91,7 +91,14 @@ async function createTriggerOrder({
   });
 
   const j = await resp.json();
-  if (!resp.ok || j.error) throw new Error(j.error || `HTTP ${resp.status}`);
+if (!resp.ok || j.error) {
+  const errorText = typeof j.error === "object"
+    ? JSON.stringify(j.error, null, 2)
+    : j.error || `HTTP ${resp.status}`;
+
+  throw new Error(`❌ ${errorText}`);
+}
+
 
   return j; // { transaction: unsignedBase64, orderId, ... }
 }
@@ -107,7 +114,11 @@ async function executeTriggerOrder({ signedOrderTransactionBase64, orderId }) {
   });
 
   const j = await resp.json();
-  if (!resp.ok || j.error) throw new Error(j.error || `HTTP ${resp.status}`);
+  if (!resp.ok || j.error) {
+    console.error("Trigger Order Error:", j);
+    throw new Error(JSON.stringify(j, null, 2));
+  }
+  
 
   return { ...j, orderId }; // return orderId for UI display
 }
@@ -123,7 +134,7 @@ async function cancelTriggerOrder({ walletAddress, orderId }) {
   });
 
   const j = await resp.json();
-  if (!resp.ok || j.error) throw new Error(j.error || `HTTP ${resp.status}`);
+  if (!resp.ok || j.error) throw new Error(`❌${j.error}` || `❌ HTTP ${resp.status}`);
 
   return { ...j, orderId };
 }

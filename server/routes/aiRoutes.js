@@ -89,7 +89,7 @@ const tools = [
             toToken: { type: 'STRING' },
             makerAmount: { type: 'NUMBER' },
             takerAmount: { type: 'NUMBER' },
-            slippageBps: { type: 'NUMBER' },
+            slippageBps: { type: 'STRING' },
             expiry: { type: 'NUMBER' },
             walletAddress: { type: 'STRING' },
           },
