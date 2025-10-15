@@ -29,13 +29,34 @@ async function searchTokenMint(tokenSymbol) {
 }
 
 // Get token info (mint + decimals)
-async function getTokenInfo(tokenSymbol) {
-  const upper = tokenSymbol.toUpperCase();
+async function getTokenInfo(tokenSymbolOrMint) {
+  const upper = tokenSymbolOrMint.toUpperCase();
+
+  //  Check by symbol
   if (KNOWN_TOKENS[upper]) return KNOWN_TOKENS[upper];
 
-  const mint = await searchTokenMint(tokenSymbol);
-  return { mint, decimals: 6 }; // default 6 decimals if unknown
+  //  Check if input is a mint
+  if (tokenSymbolOrMint.length === 44) {
+    const known = Object.values(KNOWN_TOKENS).find(
+      (t) => t.mint === tokenSymbolOrMint
+    );
+    if (known) return known;
+
+    // Only fallback if truly unknown
+    return { mint: tokenSymbolOrMint, decimals: 6 }; // safest default
+  }
+
+  //  Fallback: try to search via API
+  const mint = await searchTokenMint(tokenSymbolOrMint);
+
+  // If the mint is in KNOWN_TOKENS, use its decimals
+  const known = Object.values(KNOWN_TOKENS).find((t) => t.mint === mint);
+  if (known) return known;
+
+  // Unknown token
+  return { mint, decimals: 6 };
 }
+
 
 // Convert amount from units back to human-readable format
 function convertFromUnits(amount, decimals) {
@@ -73,7 +94,7 @@ async function createTriggerOrder({
 
   // Convert amounts to proper decimal units
   const makerAmountUnits = Math.round(makerAmount * Math.pow(10, fromTokenInfo.decimals));
-  const takerAmountUnits = Math.round(takerAmount * Math.pow(10, toTokenInfo.decimals));
+const takerAmountUnits = Math.round(takerAmount * Math.pow(10, toTokenInfo.decimals));
 
   const url = "https://lite-api.jup.ag/trigger/v1/createOrder";
   const body = {
@@ -82,8 +103,8 @@ async function createTriggerOrder({
     maker: walletAddress,
     payer: walletAddress,
     params: {
-      makingAmount: makerAmountUnits.toString(),
-      takingAmount: takerAmountUnits.toString(),
+      makingAmount: makerAmountUnits.toString(), // ✅ human-readable (0.03 SOL ≈ $5)
+        takingAmount: takerAmountUnits.toString(),
       //Jupiter API expects slippageBps as a string
       slippageBps: String(slippageBps),
       ...(expiryUnix ? { expiredAtUnix: expiryUnix } : {}),

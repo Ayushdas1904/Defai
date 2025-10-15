@@ -93,7 +93,8 @@ const tools = [
             expiry: { type: 'NUMBER' },
             walletAddress: { type: 'STRING' },
           },
-          required: ['fromToken', 'toToken', 'makerAmount', 'takerAmount', 'walletAddress'],
+          //do not include walletAddress in the required parameters as it is already tracked.
+          required: ['fromToken', 'toToken', 'makerAmount', 'takerAmount'],
         },
       },
       {
@@ -200,7 +201,7 @@ router.post('/prompt', async (req, res) => {
           }
           case 'createTriggerOrder': {
             const result = await createTriggerOrder({
-              walletAddress: args.walletAddress || walletAddress,
+              walletAddress: walletAddress,
               fromMint: await getMintAddress(args.fromToken),
               toMint: await getMintAddress(args.toToken),
               makerAmount: args.makerAmount,
