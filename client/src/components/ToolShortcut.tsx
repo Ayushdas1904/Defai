@@ -35,8 +35,8 @@ const tools: Tool[] = [
     icon: <ArrowUp className="w-4 h-4 text-green-400" />,
     examples: [
       "Send 0.001 SOL to Cogf5Bf75...",
-      "Send 5 USDC to wallet X",
-      "Transfer 10 BONK to friend",
+      "Send 5 USDC to wallet Cogf5Bf75...",
+      "Transfer 10 BONK to Cogf5Bf75...",
     ],
   },
   {
@@ -52,8 +52,8 @@ const tools: Tool[] = [
     name: "Trigger",
     icon: <Shuffle className="w-4 h-4 text-purple-400" />,
     examples: [
-      "Create a trigger order: 5 USDC → 5 USDT",
-      "Set limit order to buy 1 SOL at $120",
+      "Create a trigger order: 0.025 SOL → 6 USDT",
+      "Set limit order to buy 1 USDC at $120 for sol",
       "Trigger swap 10 BONK if price > 0.001",
     ],
   },
@@ -71,8 +71,8 @@ const tools: Tool[] = [
     icon: <History className="w-4 h-4 text-blue-400" />,
     examples: [
       "Show my recent transactions",
-      "List last 5 swaps",
-      "Transaction history for USDC",
+      "List last 5 transactions",
+    //   "Transaction history for USDC",
     ],
   },
 ];

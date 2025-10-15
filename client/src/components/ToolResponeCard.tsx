@@ -67,20 +67,20 @@ export const ToolResponseCard = ({ content }: { content: string }) => {
       status = "Order created successfully";
       mainContent = content.replace("✅ Trigger order created: ", "");
     }
-    if (content.startsWith("🛑 Trigger order cancelled")) {
+    if (content.includes("🛑 Cancel request for Order ID")) {
       toolName = "Trigger Order";
-      status = "Order cancelled";
-      mainContent = content.replace("🛑 Trigger order cancelled: ", "");
+      status = "Cancel request initiated";
+      mainContent = content;
     }
-    if (content.startsWith("📋 Your trigger orders")) {
+    if (content.includes("✅ Order Cancelled")) {
       toolName = "Trigger Order";
-      status = "Fetched trigger orders";
-      mainContent = content.replace("📋 Your trigger orders:\n\n", "");
+      status = "Order cancelled successfully";
+      mainContent = content;
     }
-    if (content.startsWith("🚀 Trigger order executed")) {
+    if (content.startsWith("📋")) {
       toolName = "Trigger Order";
-      status = "Order executed";
-      mainContent = content.replace("🚀 Trigger order executed: ", "");
+      status = "Active orders retrieved";
+      mainContent = content.replace("📋 ", "");
     }
     
     // 🔹 Errors

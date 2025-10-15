@@ -67,27 +67,52 @@ export const useChatLogic = () => {
       return;
     }
 
-    addMessage('model', `Action required: Please approve the swap/trigger order transaction in your wallet.`);
-
     try {
+      // Enhanced wallet prompt message
+      if (toolResult.orderId) {
+        addMessage('model', `🛑 **Cancel Order Request**\nOrder ID: ${toolResult.orderId}\n\nPlease approve the cancellation transaction in your wallet.`, true);
+      } else {
+        addMessage('model', `Action required: Please approve the swap/trigger order transaction in your wallet.`);
+      }
+
       const transactionBuffer = Buffer.from(toolResult.base64Tx, 'base64');
       const transaction = VersionedTransaction.deserialize(transactionBuffer);
 
       const signature = await sendTransaction(transaction, connection);
-      addMessage('model', `Swap/Trigger transaction sent! Waiting for confirmation...\n\n[View on Solscan](https://solscan.io/tx/${signature})`, true);
 
+      // Transaction sent message
+      if (toolResult.orderId) {
+        addMessage('model', `🟢 **Cancellation Transaction Sent**\nOrder ID: ${toolResult.orderId}\n\n[View on Solscan](https://solscan.io/tx/${signature})`, true);
+      } else {
+        addMessage('model', `Swap/Trigger transaction sent! Waiting for confirmation...\n\n[View on Solscan](https://solscan.io/tx/${signature})`, true);
+      }
+
+      // Wait for confirmation
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
       await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'processed');
-      addMessage('model', `✅ Transaction Confirmed!`, true);
 
-    } catch (err: unknown) {
+      // Final confirmation
+      if (toolResult.orderId) {
+        addMessage('model', `✅ **Order Successfully Cancelled**\nOrder ID: ${toolResult.orderId}`, true);
+      } else {
+        addMessage('model', `✅ Transaction Confirmed!`, true);
+      }
+
+    } catch (err) {
       let errorMessage = "An unexpected error occurred.";
       if (err instanceof Error) {
-        if (err.message.includes("reverted during simulation")) errorMessage = "The wallet blocked this transaction, possibly invalid on Mainnet.";
-        else if (err.message.includes("User rejected")) errorMessage = "You cancelled the transaction in your wallet.";
-        else errorMessage = err.message;
+        if (err.message.includes("User rejected")) {
+          errorMessage = "You cancelled the transaction in your wallet.";
+        } else {
+          errorMessage = err.message;
+        }
       }
-      addMessage('model', `❌ Transaction failed: ${errorMessage}`, true);
+      
+      if (toolResult.orderId) {
+        addMessage('model', `❌ **Order Cancellation Failed**\nOrder ID: ${toolResult.orderId}\nError: ${errorMessage}`, true);
+      } else {
+        addMessage('model', `❌ Transaction failed: ${errorMessage}`, true);
+      }
     }
   };
 

@@ -217,16 +217,57 @@ router.post('/prompt', async (req, res) => {
             res.write(`data: ${JSON.stringify({ type: 'text', content: `🚀 Trigger order executed: Order ID ${args.orderId}`, isToolResponse: true })}\n\n`);
             break;
           }
-          case 'cancelTriggerOrder': {
-            await cancelTriggerOrder({ walletAddress: args.walletAddress || walletAddress, orderId: args.orderId });
-            res.write(`data: ${JSON.stringify({ type: 'text', content: `🛑 Trigger order cancelled: Order ID ${args.orderId}`, isToolResponse: true })}\n\n`);
+          case "cancelTriggerOrder": {
+            const cancelTx = await cancelTriggerOrder({
+              walletAddress,
+              orderId: args.orderId,
+            });
+
+            // Send transaction for signing
+            res.write(`data: ${JSON.stringify({
+              type: "tool_code",
+              content: {
+                action: 'signAndSendTransaction',
+                base64Tx: cancelTx.transaction,
+                orderId: args.orderId
+              }
+            })}\n\n`);
             break;
           }
+
           case 'getTriggerOrders': {
-            const orders = await getTriggerOrders({ walletAddress: args.walletAddress || walletAddress });
-            res.write(`data: ${JSON.stringify({ type: 'text', content: `📋 Your trigger orders:\n\n${JSON.stringify(orders, null, 2)}`, isToolResponse: true })}\n\n`);
+            const { orders } = await getTriggerOrders({ walletAddress });
+
+            if (!orders || orders.length === 0) {
+              res.write(`data: ${JSON.stringify({
+                type: 'text',
+                content: "⚠️ No active trigger orders found.",
+                isToolResponse: true,
+              })}\n\n`);
+              break;
+            }
+
+            const mintMap = {
+              "So11111111111111111111111111111111111111112": "SOL",
+              "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
+              // add more mappings if needed
+            };
+
+            const formatted = orders.map((o) => {
+              const inputToken = mintMap[o.inputMint] || o.inputMint;
+              const outputToken = mintMap[o.outputMint] || o.outputMint;
+              return `Order ID: ${o.orderKey}\n➡️ Selling ${inputToken} to buy ${outputToken}`;
+            }).join("\n\n");
+
+            res.write(`data: ${JSON.stringify({
+              type: 'text',
+              content: `📋 Found ${orders.length} active trigger order(s):\n\n${formatted}\n\nWhich order do you want to cancel? Please provide the Order ID.`,
+              isToolResponse: true,
+            })}\n\n`);
             break;
           }
+
+
           default:
             res.write(`data: ${JSON.stringify({ type: 'error', content: `Unknown tool: ${name}` })}\n\n`);
         }

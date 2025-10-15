@@ -98,13 +98,13 @@ async function createTriggerOrder({
   });
 
   const j = await resp.json();
-if (!resp.ok || j.error) {
-  const errorText = typeof j.error === "object"
-    ? JSON.stringify(j.error, null, 2)
-    : j.error || `HTTP ${resp.status}`;
+  if (!resp.ok || j.error) {
+    const errorText = typeof j.error === "object"
+      ? JSON.stringify(j.error, null, 2)
+      : j.error || `HTTP ${resp.status}`;
 
-  throw new Error(`❌ ${errorText}`);
-}
+    throw new Error(`❌ ${errorText}`);
+  }
 
 
   return j; // { transaction: unsignedBase64, orderId, ... }
@@ -125,14 +125,18 @@ async function executeTriggerOrder({ signedOrderTransactionBase64, orderId }) {
     console.error("Trigger Order Error:", j);
     throw new Error(JSON.stringify(j, null, 2));
   }
-  
+
 
   return { ...j, orderId }; // return orderId for UI display
 }
 
 async function cancelTriggerOrder({ walletAddress, orderId }) {
-  const url = "https://lite-api.jup.ag/trigger/v1/cancelOrder";
-  const body = { owner: walletAddress, orderId };
+  const url = "https://lite-api.jup.ag/trigger/v1/cancelOrders";
+  const body = {
+    maker: walletAddress,
+    orders: [orderId],
+    computeUnitPrice: "auto",
+  };
 
   const resp = await fetch(url, {
     method: "POST",
@@ -141,15 +145,23 @@ async function cancelTriggerOrder({ walletAddress, orderId }) {
   });
 
   const j = await resp.json();
-  if (!resp.ok || j.error) throw new Error(`❌${j.error}` || `❌ HTTP ${resp.status}`);
 
+  if (!resp.ok || j.error) {
+    const errorText = typeof j.error === "object"
+      ? JSON.stringify(j.error, null, 2)
+      : j.error || `HTTP ${resp.status}`;
+    throw new Error(`❌ ${errorText}`);
+  }
+
+  // j will contain { transaction: base64Unsigned, ... }
   return { ...j, orderId };
 }
 
 async function getTriggerOrders({ walletAddress }) {
-  const url = `https://lite-api.jup.ag/trigger/v1/getTriggerOrders?owner=${walletAddress}`;
+  const url = `https://lite-api.jup.ag/trigger/v1/getTriggerOrders?user=${walletAddress}&orderStatus=active`;
   const resp = await fetch(url);
   const j = await resp.json();
+
   if (!resp.ok || j.error) throw new Error(j.error || `HTTP ${resp.status}`);
   return j; // list of orders
 }

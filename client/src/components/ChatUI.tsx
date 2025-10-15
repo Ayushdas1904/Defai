@@ -39,7 +39,7 @@ const ChatUI = () => {
   };
 
   return (
-    <div className="w-full h-screen flex flex-col items-center">
+    <div className="w-full flex flex-col items-center">
       {!hasMessages && (
         <p className="text-center text-3xl text-foreground mt-20">
           How Can I Help You?
@@ -90,10 +90,10 @@ const ChatUI = () => {
               >
                 {/* Message Content */}
                 <div
-                  className={`rounded-3xl p-5 whitespace-pre-wrap text-sm ${
+                  className={`rounded-3xl p-4 whitespace-pre-wrap text-sm ${
                     isUser
-                      ? "bg-gray-100 text-white dark:bg-[#807f7f]"
-                      : "bg-gray-200 text-black dark:bg-[#626060] dark:text-white"
+                      ? "bg-gray-100 text-white dark:bg-[#807f7f] rounded-tr-sm"
+                      : "bg-gray-200 text-black dark:bg-[#626060] dark:text-white rounded-tl-sm"
                   }`}
                 >
                   <ReactMarkdown rehypePlugins={[rehypeHighlight]}>

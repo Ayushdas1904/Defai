@@ -15,6 +15,7 @@ export type CreateAndSendContent = {
 export type SignAndSendContent = {
   action: 'signAndSendTransaction';
   base64Tx: string;
+  orderId?: string; // Optional order ID for tracking
 };
 
 // A union type for all possible tool calls that require frontend action
