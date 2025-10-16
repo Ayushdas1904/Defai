@@ -9,6 +9,8 @@ import swapTokens from '../tools/swapTokens.js';
 import getPortfolio from '../tools/getPortfolio.js';
 import getTokenPrice from '../tools/getTokenPrice.js';
 import getTransactionHistory from '../tools/getTransactionHistory.js';
+import getPriceHistory from '../tools/getPriceHistory.js';
+import getTokenComparison from '../tools/getTokenComparison.js';
 import { createTriggerOrder, executeTriggerOrder, cancelTriggerOrder, getTriggerOrders, getMintAddress } from '../tools/triggerOrder.js';
 
 dotenv.config();
@@ -123,7 +125,32 @@ const tools = [
           properties: { walletAddress: { type: 'STRING' } },
           required: ['walletAddress'],
         },
-      },
+      },{
+        name: 'getPriceHistory',
+        description: 'Get historical USD price data for a token (used to plot charts).',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            tokenSymbol: { type: 'STRING', description: 'Token symbol, e.g., SOL or USDC' },
+            days: { type: 'NUMBER', description: 'Number of days of history (default 7)' },
+          },
+          required: ['tokenSymbol'],
+        },
+      },{
+        name: 'getTokenComparison',
+        description: 'Compare price performance of two tokens over time (normalized to percentage change).',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            token1: { type: 'STRING', description: 'First token symbol, e.g., SOL' },
+            token2: { type: 'STRING', description: 'Second token symbol, e.g., BTC' },
+            days: { type: 'NUMBER', description: 'Number of days to compare (default 7)' },
+          },
+          required: ['token1', 'token2'],
+        },
+      }
+      
+
     ]
   }
 ];
@@ -267,6 +294,41 @@ router.post('/prompt', async (req, res) => {
             })}\n\n`);
             break;
           }
+          case 'getPriceHistory': {
+            const chart = await getPriceHistory(args);
+            res.write(`data: ${JSON.stringify({
+              type: 'chart',
+              content: {
+                title: `📈 ${chart.tokenSymbol} Price (Last ${chart.days} Days)`,
+                type: 'line',
+                labels: chart.timestamps,
+                values: chart.prices,
+              },
+            })}\n\n`);
+            break;
+          }
+          case 'getTokenComparison': {
+            try {
+              const comparison = await getTokenComparison(args);
+              res.write(`data: ${JSON.stringify({
+                type: 'chart',
+                content: {
+                  title: `📊 ${comparison.token1} vs ${comparison.token2} Performance (Last ${comparison.days} Days)`,
+                  type: 'line',
+                  labels: comparison.timestamps,
+                  series: comparison.series,
+                },
+              })}\n\n`);
+            } catch (comparisonError) {
+              console.error('Token comparison error:', comparisonError);
+              res.write(`data: ${JSON.stringify({
+                type: 'error',
+                content: `Failed to compare tokens: ${comparisonError.message}`
+              })}\n\n`);
+            }
+            break;
+          }
+          
 
 
           default:

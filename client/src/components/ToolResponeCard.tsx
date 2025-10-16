@@ -1,6 +1,9 @@
 // src/components/ToolResponseCard.tsx
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
+import Chart from "./ui/chart";
+import type { ChartData } from '../types';
+
 
 // A simple map to get an icon for each tool
 const ToolIcon = ({ toolName }: { toolName: string }) => {
@@ -8,6 +11,8 @@ const ToolIcon = ({ toolName }: { toolName: string }) => {
     'Check Balance': '💰',
     'Portfolio Snapshot': '💼',
     'Token Price': '📈',
+    'Price Chart': '📊',
+    'Token Comparison': '📊',
     'Transaction History': '📜',
     'Transaction Status': '✅',
     'Trigger Order': '🎯',
@@ -16,78 +21,105 @@ const ToolIcon = ({ toolName }: { toolName: string }) => {
   return <span className="text-xl">{icons[toolName] || '⚙️'}</span>;
 };
 
-export const ToolResponseCard = ({ content }: { content: string }) => {
+export const ToolResponseCard = ({ content }: { content: string | ChartData }) => {
   const [showFullResult, setShowFullResult] = React.useState(false);
 
   const parseContent = () => {
     let toolName = "Agent Response";
     let status = "Completed";
-    let mainContent = content;
+    let mainContent: string | ChartData = content;
 
-    // 🔹 Balance
-    const balanceMatch = content.match(/Your (.*) balance is (.*)/);
-    if (balanceMatch) {
-      toolName = "Check Balance";
-      status = "Data retrieved successfully";
-      mainContent = `**${balanceMatch[2]}**`;
-    }
-
-    // 🔹 Token Price
-    const priceMatch = content.match(/The current price of (.*) is \$(.*)\.?/);
-    if (priceMatch) {
-      toolName = "Token Price";
-      status = "Data retrieved successfully";
-      mainContent = `**$${priceMatch[2]}**`;
-    }
-    
-    // 🔹 Portfolio
-    if (content.startsWith("Here's a snapshot")) {
-      toolName = "Portfolio Snapshot";
-      status = "Data retrieved successfully";
-      mainContent = content.replace("Here's a snapshot of your portfolio:\n\n", "");
-    }
-    
-    // 🔹 Transaction History
-    if (content.startsWith("Here are your most recent")) {
-      toolName = "Transaction History";
-      status = "Data retrieved successfully";
-      mainContent = content.replace("Here are your most recent transactions:\n\n", "");
-    }
-    
-    // 🔹 Transaction Confirmation
-    if (content.includes("Transaction Confirmed")) {
-      toolName = "Transaction Status";
-      status = "Transaction Confirmed";
-      mainContent = "The transaction was successfully confirmed on the network.";
+    // Handle chart data directly
+    if (typeof content === 'object' && content.labels && (content.values || content.series)) {
+      toolName = content.series ? "Token Comparison" : "Price Chart";
+      status = "Chart generated";
+      return { toolName, status, mainContent };
     }
 
-    // 🔹 Trigger Orders (Create / Cancel / Get / Execute)
-    if (content.startsWith("✅ Trigger order created")) {
-      toolName = "Trigger Order";
-      status = "Order created successfully";
-      mainContent = content.replace("✅ Trigger order created: ", "");
-    }
-    if (content.includes("🛑 Cancel request for Order ID")) {
-      toolName = "Trigger Order";
-      status = "Cancel request initiated";
-      mainContent = content;
-    }
-    if (content.includes("✅ Order Cancelled")) {
-      toolName = "Trigger Order";
-      status = "Order cancelled successfully";
-      mainContent = content;
-    }
-    if (content.startsWith("📋")) {
-      toolName = "Trigger Order";
-      status = "Active orders retrieved";
-      mainContent = content.replace("📋 ", "");
-    }
-    
-    // 🔹 Errors
-    if (content.startsWith("❌")) {
-      toolName = "Error";
-      status = "An error occurred";
-      mainContent = content.replace("❌ ", "");
+    // Only process string content for text parsing
+    if (typeof content === 'string') {
+      // 🔹 Balance
+      const balanceMatch = content.match(/Your (.*) balance is (.*)/);
+      if (balanceMatch) {
+        toolName = "Check Balance";
+        status = "Data retrieved successfully";
+        mainContent = `**${balanceMatch[2]}**`;
+        return { toolName, status, mainContent };
+      }
+
+      // 🔹 Token Price
+      const priceMatch = content.match(/The current price of (.*) is \$(.*)\.?/);
+      if (priceMatch) {
+        toolName = "Token Price";
+        status = "Data retrieved successfully";
+        mainContent = `**$${priceMatch[2]}**`;
+        return { toolName, status, mainContent };
+      }
+      
+      // 🔹 Portfolio
+      if (content.startsWith("Here's a snapshot")) {
+        toolName = "Portfolio Snapshot";
+        status = "Data retrieved successfully";
+        mainContent = content.replace("Here's a snapshot of your portfolio:\n\n", "");
+        return { toolName, status, mainContent };
+      }
+      
+      // 🔹 Transaction History
+      if (content.startsWith("Here are your most recent")) {
+        toolName = "Transaction History";
+        status = "Data retrieved successfully";
+        mainContent = content.replace("Here are your most recent transactions:\n\n", "");
+        return { toolName, status, mainContent };
+      }
+      
+      // 🔹 Transaction Confirmation
+      if (content.includes("Transaction Confirmed")) {
+        toolName = "Transaction Status";
+        status = "Transaction Confirmed";
+        mainContent = "The transaction was successfully confirmed on the network.";
+        return { toolName, status, mainContent };
+      }
+
+      // 🔹 Trigger Orders (Create / Cancel / Get / Execute)
+      if (content.startsWith("✅ Trigger order created")) {
+        toolName = "Trigger Order";
+        status = "Order created successfully";
+        mainContent = content.replace("✅ Trigger order created: ", "");
+        return { toolName, status, mainContent };
+      }
+      if (content.includes("🛑 Cancel request for Order ID")) {
+        toolName = "Trigger Order";
+        status = "Cancel request initiated";
+        mainContent = content;
+        return { toolName, status, mainContent };
+      }
+      if (content.includes("✅ Order Cancelled")) {
+        toolName = "Trigger Order";
+        status = "Order cancelled successfully";
+        mainContent = content;
+        return { toolName, status, mainContent };
+      }
+      if (content.startsWith("📋")) {
+        toolName = "Trigger Order";
+        status = "Active orders retrieved";
+        mainContent = content.replace("📋 ", "");
+        return { toolName, status, mainContent };
+      }
+      
+      // 🔹 Errors
+      if (content.startsWith("❌")) {
+        toolName = "Error";
+        status = "An error occurred";
+        mainContent = content.replace("❌ ", "");
+        return { toolName, status, mainContent };
+      }
+
+      if (content.includes("📈")) {
+        toolName = "Token Price";
+        status = "Chart generated";
+        mainContent = content.replace("📈 ", "");
+        return { toolName, status, mainContent };
+      }
     }
 
     return { toolName, status, mainContent };
@@ -109,16 +141,30 @@ export const ToolResponseCard = ({ content }: { content: string }) => {
         </div>
       </div>
       
-      {mainContent && (
-        <div className="mt-4 text-white pl-10">
-          <ReactMarkdown>{mainContent}</ReactMarkdown>
-        </div>
-      )}
+      {mainContent && typeof mainContent === "string" && (
+  <div className="mt-4 text-white pl-10">
+    <ReactMarkdown>{mainContent}</ReactMarkdown>
+  </div>
+)}
+
+{/* 🔹 Chart Support */}
+{typeof mainContent === "object" && mainContent.labels && (mainContent.values || mainContent.series) && (
+  <div className="mt-4 pl-10">
+    <Chart
+      title={mainContent.title || "Price Chart"}
+      labels={mainContent.labels}
+      values={mainContent.values}
+      series={mainContent.series}
+      type={mainContent.type || "line"}
+    />
+  </div>
+)}
+
 
       {showFullResult && (
         <div className="mt-4 bg-black p-3 rounded-lg">
           <pre className="text-xs text-gray-300 whitespace-pre-wrap">
-            <code>{content}</code>
+            <code>{typeof content === 'string' ? content : JSON.stringify(content, null, 2)}</code>
           </pre>
         </div>
       )}
