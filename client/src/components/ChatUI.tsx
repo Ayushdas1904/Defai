@@ -97,13 +97,13 @@ const ChatUI = () => {
                   }`}
                 >
                   <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
-                    {msg.content}
+                    {typeof msg.content === 'string' ? msg.content : 'Chart data'}
                   </ReactMarkdown>
                 </div>
 
                 {/* Copy Button */}
                 <button
-                  onClick={() => handleCopy(msg.content, i)}
+                  onClick={() => handleCopy(typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content, null, 2), i)}
                   className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-gray-500/20 flex-shrink-0 mt-1"
                 >
                   {copiedIndex === i ? (

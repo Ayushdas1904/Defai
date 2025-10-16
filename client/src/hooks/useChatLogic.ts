@@ -3,7 +3,7 @@ import React from 'react';
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { Transaction, SystemProgram, PublicKey, LAMPORTS_PER_SOL, VersionedTransaction } from '@solana/web3.js';
 import { Buffer } from 'buffer';
-import type { Message, StreamData, CreateAndSendContent, SignAndSendContent } from '../types';
+import type { Message, StreamData, CreateAndSendContent, SignAndSendContent, ChartData } from '../types';
 
 export const useChatLogic = () => {
   const [messages, setMessages] = React.useState<Message[]>([]);
@@ -13,7 +13,7 @@ export const useChatLogic = () => {
   const { connection } = useConnection();
   const { publicKey, sendTransaction, connected } = useWallet();
 
-  const addMessage = (role: "user" | "model", content: string, isToolResponse: boolean = false) => {
+  const addMessage = (role: "user" | "model", content: string | ChartData, isToolResponse: boolean = false) => {
     setMessages(prev => [...prev, { role, content, isToolResponse }]);
   };
 
@@ -158,6 +158,8 @@ export const useChatLogic = () => {
                 updated[updated.length - 1] = lastMsg;
                 return updated;
               });
+            } else if (data.type === "chart") {
+              addMessage("model", data.content, true);
             } else if (data.type === "tool_code") {
               if (data.content.action === 'createAndSendTransaction') handleCreateAndSend(data.content);
               else if (data.content.action === 'signAndSendTransaction') handleSignAndSend(data.content);
