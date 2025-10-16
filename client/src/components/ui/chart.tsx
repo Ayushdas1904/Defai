@@ -21,17 +21,17 @@ type ChartProps = {
   type?: "line" | "bar";
 };
 
-export default function Chart({ title, labels, values, series, type = "line" }: ChartProps) {
+export default function Chart({ title, labels, values, series /*, type = "line"*/ }: ChartProps) {
   // Note: type parameter is for future bar chart support
-  const chartType = type; // Suppress unused variable warning
-  // Handle single series (legacy format)
+  // const chartType = type; // Suppress unused variable warning
+
   const data = values ? labels.map((label, i) => ({
     name: label,
     value: values[i],
   })) : 
   // Handle multiple series (comparison format)
   series ? labels.map((label, i) => {
-    const dataPoint: any = { name: label };
+    const dataPoint: { name: string } & { [key: string]: number | string } = { name: label };
     series.forEach(s => {
       dataPoint[s.name] = s.data[i];
     });
