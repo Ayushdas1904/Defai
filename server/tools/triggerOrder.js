@@ -151,31 +151,98 @@ async function executeTriggerOrder({ signedOrderTransactionBase64, orderId }) {
   return { ...j, orderId }; // return orderId for UI display
 }
 
+// Simple delay helper for retries
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function mapJupiterCancelError(errPayload) {
+  try {
+    // errPayload may be string or object
+    const errString = typeof errPayload === "string" ? errPayload : JSON.stringify(errPayload);
+    if (errString.match(/already\s*inactive|already\s*cancelled/i)) {
+      return "Order is already inactive or cancelled.";
+    }
+    if (errString.match(/not\s*found|unknown\s*order/i)) {
+      return "Order not found. Please verify the Order ID.";
+    }
+    if (errString.match(/rate\s*limit|too\s*many\s*requests|429/)) {
+      return "Rate limited by Jupiter. Please retry shortly.";
+    }
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function cancelTriggerOrder({ walletAddress, orderId }) {
-  const url = "https://lite-api.jup.ag/trigger/v1/cancelOrders";
-  const body = {
-    maker: walletAddress,
-    orders: [orderId],
-    computeUnitPrice: "auto",
+  const url = "https://lite-api.jup.ag/trigger/v1/cancelOrder";
+  const body = { 
+    maker: walletAddress, 
+    order: orderId,
+    computeUnitPrice: "auto"
   };
 
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  console.log('Jupiter cancelOrder request:', JSON.stringify(body, null, 2));
 
-  const j = await resp.json();
+  const maxAttempts = 3;
+  let lastError = null;
 
-  if (!resp.ok || j.error) {
-    const errorText = typeof j.error === "object"
-      ? JSON.stringify(j.error, null, 2)
-      : j.error || `HTTP ${resp.status}`;
-    throw new Error(`❌ ${errorText}`);
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const j = await resp.json();
+
+      console.log('Jupiter cancelOrder response:', JSON.stringify(j, null, 2));
+
+      if (!resp.ok || j.error) {
+        // Handle ZodError specifically
+        if (j.error && j.error.name === 'ZodError' && j.error.issues) {
+          const zodIssues = j.error.issues.map(issue => 
+            `${issue.path.join('.')}: ${issue.message}`
+          ).join(', ');
+          throw new Error(`Request validation failed: ${zodIssues}`);
+        }
+
+        const mapped = mapJupiterCancelError(j.error || j);
+        const raw = (j && (j.error && (j.error.message || j.error.code) ? j.error : j)) || {};
+        const rawStr = typeof raw === "string" ? raw : JSON.stringify(raw);
+        const message = mapped || (typeof j.error === "string" ? j.error : rawStr || `HTTP ${resp.status}`);
+
+        // Retry on transient issues (rate limit, 5xx)
+        if (resp.status === 429 || (resp.status >= 500 && resp.status < 600)) {
+          lastError = new Error(typeof message === "string" ? message : JSON.stringify(message));
+          const backoffMs = 300 * attempt;
+          await delay(backoffMs);
+          continue;
+        }
+
+        throw new Error(typeof message === "string" ? message : JSON.stringify(message));
+      }
+
+      if (!j.transaction) {
+        throw new Error("No transaction returned from Jupiter API. The order may already be cancelled or invalid.");
+      }
+
+      return { transaction: j.transaction, orderId: orderId };
+    } catch (e) {
+      // Network errors or JSON parse errors → retry
+      lastError = e instanceof Error ? e : new Error(String(e));
+      if (attempt < maxAttempts) {
+        const backoffMs = 300 * attempt;
+        await delay(backoffMs);
+        continue;
+      }
+      break;
+    }
   }
 
-  // j will contain { transaction: base64Unsigned, ... }
-  return { ...j, orderId };
+  throw lastError || new Error("Cancel order failed after retries.");
 }
 
 async function getTriggerOrders({ walletAddress }) {

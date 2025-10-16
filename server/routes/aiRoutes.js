@@ -112,7 +112,7 @@ const tools = [
         parameters: {
           type: 'OBJECT',
           properties: { walletAddress: { type: 'STRING' }, orderId: { type: 'STRING' } },
-          required: ['walletAddress', 'orderId'],
+          required: ['orderId'],
         },
       },
       {
@@ -121,7 +121,6 @@ const tools = [
         parameters: {
           type: 'OBJECT',
           properties: { walletAddress: { type: 'STRING' } },
-          required: ['walletAddress'],
         },
       },
     ]
@@ -219,20 +218,27 @@ router.post('/prompt', async (req, res) => {
             break;
           }
           case "cancelTriggerOrder": {
-            const cancelTx = await cancelTriggerOrder({
-              walletAddress,
-              orderId: args.orderId,
-            });
+            try {
+              const cancelTx = await cancelTriggerOrder({
+                walletAddress,
+                orderId: args.orderId,
+              });
 
-            // Send transaction for signing
-            res.write(`data: ${JSON.stringify({
-              type: "tool_code",
-              content: {
-                action: 'signAndSendTransaction',
-                base64Tx: cancelTx.transaction,
-                orderId: args.orderId
-              }
-            })}\n\n`);
+              res.write(`data: ${JSON.stringify({
+                type: "tool_code",
+                content: {
+                  action: 'signAndSendTransaction',
+                  base64Tx: cancelTx.transaction,
+                  orderId: args.orderId
+                }
+              })}\n\n`);
+            } catch (err) {
+              const message = (err && err.message) ? err.message : (typeof err === 'string' ? err : JSON.stringify(err));
+              res.write(`data: ${JSON.stringify({
+                type: "error",
+                content: `Cancel order failed: ${message}`,
+              })}\n\n`);
+            }
             break;
           }
 
