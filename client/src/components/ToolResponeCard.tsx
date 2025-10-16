@@ -16,6 +16,7 @@ const ToolIcon = ({ toolName }: { toolName: string }) => {
     'Transaction History': '📜',
     'Transaction Status': '✅',
     'Trigger Order': '🎯',
+    'Contact': '👤',
     'Error': '❌',
   };
   return <span className="text-xl">{icons[toolName] || '⚙️'}</span>;
@@ -118,6 +119,32 @@ export const ToolResponseCard = ({ content }: { content: string | ChartData }) =
         toolName = "Token Price";
         status = "Chart generated";
         mainContent = content.replace("📈 ", "");
+        return { toolName, status, mainContent };
+      }
+
+      // 🔹 Contact operations
+      if (content.startsWith("Contact") && content.includes("→")) {
+        toolName = "Contact";
+        status = "Contact found";
+        mainContent = content;
+        return { toolName, status, mainContent };
+      }
+      if (content.startsWith("✅") && (content.includes("Added") || content.includes("Removed"))) {
+        toolName = "Contact";
+        status = "Contact updated";
+        mainContent = content.replace("✅ ", "");
+        return { toolName, status, mainContent };
+      }
+      if (content.startsWith("📋")) {
+        toolName = "Contact";
+        status = "Contacts retrieved";
+        mainContent = content.replace("📋 ", "");
+        return { toolName, status, mainContent };
+      }
+      if (content.includes("No contact found")) {
+        toolName = "Contact";
+        status = "Contact not found";
+        mainContent = content;
         return { toolName, status, mainContent };
       }
     }
