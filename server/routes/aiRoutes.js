@@ -2,7 +2,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
-
+import { getContact, addContact, removeContact, getContacts } from '../tools/contacts.js';
 import getBalance from '../tools/getBalance.js';
 import send from '../tools/send.js';
 import swapTokens from '../tools/swapTokens.js';
@@ -124,7 +124,7 @@ const tools = [
           type: 'OBJECT',
           properties: { walletAddress: { type: 'STRING' } },
         },
-      },{
+      }, {
         name: 'getPriceHistory',
         description: 'Get historical USD price data for a token (used to plot charts).',
         parameters: {
@@ -135,7 +135,7 @@ const tools = [
           },
           required: ['tokenSymbol'],
         },
-      },{
+      }, {
         name: 'getTokenComparison',
         description: 'Compare price performance of two tokens over time (normalized to percentage change).',
         parameters: {
@@ -147,8 +147,46 @@ const tools = [
           },
           required: ['token1', 'token2'],
         },
+      },
+      {
+        name: 'getContact',
+        description: 'Resolve a contact name to a wallet address.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            name: { type: 'STRING', description: 'Name of the contact, e.g., Alice' },
+          },
+          required: ['name'],
+        },
+      },
+      {
+        name: 'addContact',
+        description: 'Add a new contact name linked to a wallet address.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            name: { type: 'STRING' },
+            address: { type: 'STRING' },
+          },
+          required: ['name', 'address'],
+        },
+      },
+      {
+        name: 'removeContact',
+        description: 'Remove an existing contact by name.',
+        parameters: {
+          type: 'OBJECT',
+          properties: { name: { type: 'STRING' } },
+          required: ['name'],
+        },
+      },
+      {
+        name: 'getContacts',
+        description: 'Get all saved contacts.',
+        parameters: { type: 'OBJECT', properties: {} },
       }
-      
+
+
 
     ]
   }
@@ -201,10 +239,18 @@ router.post('/prompt', async (req, res) => {
             break;
           }
           case 'send': {
-            const txArgs = await send({ ...args, fromAddress: walletAddress });
+            // Check if toAddress is a contact name or already an address
+            let toAddress = args.toAddress;
+            const contactAddress = getContact(args.toAddress);
+            if (contactAddress) {
+              toAddress = contactAddress;
+              res.write(`data: ${JSON.stringify({ type: 'text', content: `Found contact: ${args.toAddress} → ${contactAddress}`, isToolResponse: true })}\n\n`);
+            }
+            const txArgs = await send({ ...args, toAddress, fromAddress: walletAddress });
             res.write(`data: ${JSON.stringify({ type: 'tool_code', content: { action: 'createAndSendTransaction', args: txArgs } })}\n\n`);
             break;
           }
+          
           case 'swapTokens': {
             const { serializedTx } = await swapTokens({ ...args, walletAddress });
             res.write(`data: ${JSON.stringify({ type: 'tool_code', content: { action: 'signAndSendTransaction', base64Tx: serializedTx } })}\n\n`);
@@ -334,7 +380,55 @@ router.post('/prompt', async (req, res) => {
             }
             break;
           }
-          
+
+
+           case 'getContact': {
+             try {
+               const contactAddress = getContact(args.name);
+               if (contactAddress) {
+                 res.write(`data: ${JSON.stringify({ type: 'text', content: `Contact ${args.name} → ${contactAddress}`, isToolResponse: true })}\n\n`);
+               } else {
+                 res.write(`data: ${JSON.stringify({ type: 'text', content: `No contact found for ${args.name}`, isToolResponse: true })}\n\n`);
+               }
+             } catch (error) {
+               res.write(`data: ${JSON.stringify({ type: 'error', content: `Failed to get contact: ${error.message}` })}\n\n`);
+             }
+             break;
+           }
+           case 'addContact': {
+             try {
+               const result = addContact(args.name, args.address);
+               res.write(`data: ${JSON.stringify({ type: 'text', content: `✅ ${result.message}`, isToolResponse: true })}\n\n`);
+             } catch (error) {
+               res.write(`data: ${JSON.stringify({ type: 'error', content: `Failed to add contact: ${error.message}` })}\n\n`);
+             }
+             break;
+           }
+           case 'removeContact': {
+             try {
+               const result = removeContact(args.name);
+               res.write(`data: ${JSON.stringify({ type: 'text', content: `✅ ${result.message}`, isToolResponse: true })}\n\n`);
+             } catch (error) {
+               res.write(`data: ${JSON.stringify({ type: 'error', content: `Failed to remove contact: ${error.message}` })}\n\n`);
+             }
+             break;
+           }
+           case 'getContacts': {
+             try {
+               const contacts = getContacts();
+               if (Object.keys(contacts).length === 0) {
+                 res.write(`data: ${JSON.stringify({ type: 'text', content: `📋 No contacts saved yet.`, isToolResponse: true })}\n\n`);
+               } else {
+                 const contactList = Object.entries(contacts).map(([name, address]) => `${name} → ${address}`).join('\n');
+                 res.write(`data: ${JSON.stringify({ type: 'text', content: `📋 Saved Contacts:\n${contactList}`, isToolResponse: true })}\n\n`);
+               }
+             } catch (error) {
+               res.write(`data: ${JSON.stringify({ type: 'error', content: `Failed to get contacts: ${error.message}` })}\n\n`);
+             }
+             break;
+           }
+
+
 
 
           default:
