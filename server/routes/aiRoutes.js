@@ -17,7 +17,6 @@ dotenv.config();
 const router = express.Router();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// --- Tools for Gemini ---
 const tools = [
   {
     functionDeclarations: [

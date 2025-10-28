@@ -59,7 +59,6 @@ const ChatUI = () => {
           }
 
           const isUser = msg.role === "user";
-
           return (
             <div
               key={i}
@@ -67,22 +66,6 @@ const ChatUI = () => {
                 isUser ? "self-end flex-row-reverse" : "self-start"
               }`}
             >
-              {/* Avatar Icon */}
-              {/* <div
-                className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                  isUser
-                    ? "bg-purple-700 text-white"
-                    : "bg-gray-600 text-white"
-                }`}
-              >
-                {isUser ? (
-                  <User className="w-4 h-4" />
-                ) : (
-                  <Bot className="w-4 h-4" />
-                )}
-              </div> */}
-
-              {/* Message Content + Copy Button Container */}
               <div
                 className={`flex items-start gap-2 group ${
                   isUser ? "flex-row-reverse" : ""
