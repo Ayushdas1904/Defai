@@ -6,15 +6,20 @@ import aiRoutes from './routes/aiRoutes.js';
 
 dotenv.config();
 const app = express();
-const port = process.env.PORT || 8080;
 
-app.use(cors());
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST"],
+}));
 app.use(express.json());
 
+// Routes
 app.use('/api', aiRoutes);
 
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+// Default route
+app.get("/", (req, res) => {
+  res.send("Server running on Vercel");
 });
 
-app.get("/", (req, res) => res.send("Server running"));
+// Export the app (Vercel expects this)
+export default app;
