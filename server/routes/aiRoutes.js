@@ -202,8 +202,9 @@ router.post('/prompt', async (req, res) => {
   res.flushHeaders();
 
   try {
+    const modelVersion = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: modelVersion,
       tools,
       systemInstruction: "You are a DeFi AI assistant specializing in Solana and crypto.",
       safetySettings: [
