@@ -5,6 +5,7 @@ import { Transaction, SystemProgram, PublicKey, LAMPORTS_PER_SOL, VersionedTrans
 import { Buffer } from 'buffer';
 import type { Message, StreamData, CreateAndSendContent, SignAndSendContent, ChartData } from '../types';
 
+
 export const useChatLogic = () => {
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -127,7 +128,7 @@ export const useChatLogic = () => {
     const history = messages.map(msg => ({ role: msg.role, parts: [{ text: msg.content }] }));
 
     try {
-      const res = await fetch("http://localhost:8080/api/prompt", {
+      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/prompt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: value, history, walletAddress: publicKey.toString() }),
