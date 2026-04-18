@@ -1,6 +1,5 @@
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
-import { GoogleGenerativeAI, HarmBlockThreshold, HarmCategory } from '@google/generative-ai';
-import { GEMINI_FUNCTION_TOOLS, SYSTEM_INSTRUCTION } from './geminiTools.js';
+import { buildChatMessages, createChatModel, resolveModelConfig } from './modelProvider.js';
 import { executeToolCall } from './toolExecutor.js';
 import { isQuotaOrRateLimitError } from './helpers.js';
 
@@ -8,6 +7,7 @@ const PromptState = Annotation.Root({
   prompt: Annotation(),
   history: Annotation(),
   walletAddress: Annotation(),
+  modelProvider: Annotation(),
   modelVersion: Annotation(),
   fallbackModel: Annotation(),
   pendingFunctionCall: Annotation(),
@@ -24,52 +24,40 @@ function pickFirstFunctionCall(calls) {
   return { name: call.name, args: call.args ?? {} };
 }
 
-async function runGeminiStreamTurn({
-  genAI,
-  modelVersion,
-  history,
-  prompt,
-  emit,
-}) {
-  const model = genAI.getGenerativeModel({
-    model: modelVersion,
-    tools: GEMINI_FUNCTION_TOOLS,
-    systemInstruction: SYSTEM_INSTRUCTION,
-    safetySettings: [
-      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-      { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-    ],
-  });
-
-  const chat = model.startChat({ history });
-  const result = await chat.sendMessageStream(prompt);
+async function runModelStreamTurn({ provider, modelVersion, history, prompt, emit }) {
+  const model = createChatModel({ provider, modelVersion });
+  const messages = buildChatMessages({ history, prompt });
+  const result = await model.stream(messages);
+  let accumulatedChunk = null;
   let pendingFunctionCall = null;
   let hasSentData = false;
 
-  for await (const chunk of result.stream) {
-    const chunkText = chunk.text();
+  for await (const chunk of result) {
+    const chunkText = chunk.text ?? '';
     if (chunkText) {
       emit({ type: 'text', content: chunkText });
       hasSentData = true;
     }
-    if (!pendingFunctionCall) {
-      pendingFunctionCall = pickFirstFunctionCall(chunk.functionCalls());
-    }
+    accumulatedChunk = accumulatedChunk ? accumulatedChunk.concat(chunk) : chunk;
   }
+
+  pendingFunctionCall = pickFirstFunctionCall(accumulatedChunk?.tool_calls);
 
   return { pendingFunctionCall, hasSentData };
 }
 
 export function createPromptGraphRunner({ emit }) {
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
   const llmNode = async (state) => {
+    const modelConfig = resolveModelConfig({
+      provider: state.modelProvider,
+      modelVersion: state.modelVersion,
+      fallbackModel: state.fallbackModel,
+    });
+
     try {
-      const primaryResult = await runGeminiStreamTurn({
-        genAI,
-        modelVersion: state.modelVersion,
+      const primaryResult = await runModelStreamTurn({
+        provider: modelConfig.provider,
+        modelVersion: modelConfig.modelVersion,
         history: state.history,
         prompt: state.prompt,
         emit,
@@ -78,12 +66,12 @@ export function createPromptGraphRunner({ emit }) {
     } catch (error) {
       if (
         isQuotaOrRateLimitError(error) &&
-        state.fallbackModel &&
-        state.fallbackModel !== state.modelVersion
+        modelConfig.fallbackModel &&
+        modelConfig.fallbackModel !== modelConfig.modelVersion
       ) {
-        const fallbackResult = await runGeminiStreamTurn({
-          genAI,
-          modelVersion: state.fallbackModel,
+        const fallbackResult = await runModelStreamTurn({
+          provider: modelConfig.provider,
+          modelVersion: modelConfig.fallbackModel,
           history: state.history,
           prompt: state.prompt,
           emit,
@@ -122,6 +110,7 @@ export function createPromptGraphRunner({ emit }) {
       prompt: input.prompt,
       history: input.history,
       walletAddress: input.walletAddress,
+        modelProvider: input.modelProvider,
       modelVersion: input.modelVersion,
       fallbackModel: input.fallbackModel,
       pendingFunctionCall: null,

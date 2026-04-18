@@ -18,6 +18,29 @@ export const useChatLogic = () => {
     setMessages(prev => [...prev, { role, content, isToolResponse }]);
   };
 
+  const buildHistory = (items: Message[]) => {
+    return items
+      .filter((msg) => msg.role === 'user' || msg.role === 'model')
+      .map((msg) => {
+        if (typeof msg.content === 'string' && msg.content.trim().length > 0) {
+          return { role: msg.role, parts: [{ text: msg.content }] };
+        }
+
+        if (msg.isToolResponse && typeof msg.content === 'object') {
+          const toolSummary = 'title' in msg.content && msg.content.title
+            ? `${msg.content.title}`
+            : 'Tool response';
+          return {
+            role: msg.role,
+            parts: [{ text: `Previous assistant tool result: ${toolSummary}` }],
+          };
+        }
+
+        return null;
+      })
+      .filter((entry): entry is { role: 'user' | 'model'; parts: { text: string }[] } => entry !== null);
+  };
+
   const handleCreateAndSend = async (toolResult: CreateAndSendContent) => {
     if (!connected || !publicKey || !sendTransaction) {
       addMessage('model', 'Wallet not connected or transaction sending is not available.', true);
@@ -125,7 +148,7 @@ export const useChatLogic = () => {
     setLoading(true);
     setInputValue("");
 
-    const history = messages.map(msg => ({ role: msg.role, parts: [{ text: msg.content }] }));
+    const history = buildHistory(messages);
 
     try {
       const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/prompt`, {
@@ -139,7 +162,7 @@ export const useChatLogic = () => {
 
       const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
       let currentModelMessage = "";
-      setMessages(prev => [...prev, { role: "model", content: "" }]);
+      let modelMessageStarted = false;
 
       while (true) {
         const { done, value: chunk } = await reader.read();
@@ -150,6 +173,10 @@ export const useChatLogic = () => {
           try {
             const data: StreamData = JSON.parse(line.slice(6));
             if (data.type === "text") {
+              if (!modelMessageStarted) {
+                modelMessageStarted = true;
+                setMessages(prev => [...prev, { role: "model", content: "" }]);
+              }
               currentModelMessage += data.content;
               setMessages(prev => {
                 const updated = [...prev];
@@ -176,6 +203,9 @@ export const useChatLogic = () => {
       const msg = err instanceof Error ? err.message : "Unknown error";
       addMessage("model", `API error: ${msg}`, true);
     } finally {
+      setMessages(prev => prev.filter((msg, index) => {
+        return !(index === prev.length - 1 && msg.role === 'model' && typeof msg.content === 'string' && msg.content.trim().length === 0 && !msg.isToolResponse);
+      }));
       setLoading(false);
     }
   };
