@@ -3,6 +3,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import aiRoutes from './routes/aiRoutes.js';
+import { connectToDatabase } from './db.js';
 
 dotenv.config();
 const app = express();
@@ -13,8 +14,17 @@ app.use(express.json());
 
 app.use('/api', aiRoutes);
 
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
-});
-
 app.get("/", (req, res) => res.send("Server running"));
+
+// Start server with DB connection
+(async () => {
+  try {
+    await connectToDatabase();
+    app.listen(port, () => {
+      console.log(`Server running at http://localhost:${port}`);
+    });
+  } catch (err) {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  }
+})();

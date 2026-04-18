@@ -16,6 +16,8 @@ const ChatUI = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
+  console.log(messages);
+
   // Auto-scroll
   useEffect(() => {
     if (messagesEndRef.current) {

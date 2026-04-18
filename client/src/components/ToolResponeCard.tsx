@@ -5,12 +5,18 @@ import Chart from "./ui/chart";
 import type { ChartData } from '../types';
 import { ChevronDown, ChevronUp } from "lucide-react";
 import PortfolioUI from "../components/toolUI/PortfolioUI";
+import ContactUI from "../components/toolUI/ContactUI";
 
 // Types for structured portfolio
 interface PortfolioRow {
   token: string;
   name: string;
   balance: string;
+}
+
+interface Contact {
+  name: string;
+  address: string;
 }
 
 // Icon map
@@ -36,11 +42,11 @@ export const ToolResponseCard = ({ content }: { content: string | ChartData }) =
   const parseContent = (): {
     toolName: string;
     status: string;
-    mainContent: string | ChartData | PortfolioRow[];
+    mainContent: string | ChartData | PortfolioRow[] | Contact[];
   } => {
     let toolName = "Agent Response";
     let status = "Completed";
-    let mainContent: string | ChartData | PortfolioRow[] = content;
+    let mainContent: string | ChartData | PortfolioRow[] | Contact[] = content;
 
     // 🔹 Chart support
     if (typeof content === 'object' && content.labels && (content.values || content.series)) {
@@ -128,6 +134,27 @@ export const ToolResponseCard = ({ content }: { content: string | ChartData }) =
         mainContent = content;
         return { toolName, status, mainContent };
       }
+
+      // Contacts (check specific patterns first before generic 📋)
+      if (content.startsWith("📋 Saved Contacts")) {
+        toolName = "Contact";
+        status = "Contacts retrieved";
+        
+        // Parse contact list: "📋 Saved Contacts:\nname1 → address1\nname2 → address2"
+        const contactLines = content
+          .split("\n")
+          .slice(1) // Skip header
+          .filter((line) => line.includes("→"))
+          .map((line) => {
+            const [name, address] = line.split("→").map((s) => s.trim());
+            return { name, address };
+          });
+        
+        mainContent = contactLines.length > 0 ? contactLines : [{ name: "No contacts", address: "-" }];
+        return { toolName, status, mainContent };
+      }
+
+      // Generic trigger orders check (after contact-specific checks)
       if (content.startsWith("📋")) {
         toolName = "Trigger Order";
         status = "Active orders retrieved";
@@ -143,7 +170,7 @@ export const ToolResponseCard = ({ content }: { content: string | ChartData }) =
         return { toolName, status, mainContent };
       }
 
-      // Contacts
+      // Contact checks (remaining patterns)
       if (content.startsWith("Contact") && content.includes("→")) {
         toolName = "Contact";
         status = "Contact found";
@@ -152,19 +179,21 @@ export const ToolResponseCard = ({ content }: { content: string | ChartData }) =
       }
       if (content.startsWith("✅") && (content.includes("Added") || content.includes("Removed"))) {
         toolName = "Contact";
-        status = "Contact updated";
-        mainContent = content.replace("✅ ", "");
+        status = content.includes("Added") ? "Contact added" : "Contact removed";
+        
+        // Parse contact: "✅ Added name → address" or "✅ Removed name → address"
+        const match = content.match(/(?:Added|Removed)\s+(.+?)\s+→\s+(.+)$/);
+        if (match) {
+          const [name, address] = match;
+          mainContent = [{ name: name.trim(), address: address.trim() }];
+        } else {
+          mainContent = content.replace("✅ ", "");
+        }
         return { toolName, status, mainContent };
       }
-      if (content.startsWith("📋")) {
+      if (content.includes("No contacts saved yet")) {
         toolName = "Contact";
-        status = "Contacts retrieved";
-        mainContent = content.replace("📋 ", "");
-        return { toolName, status, mainContent };
-      }
-      if (content.includes("No contact found")) {
-        toolName = "Contact";
-        status = "Contact not found";
+        status = "No contacts found";
         mainContent = content;
         return { toolName, status, mainContent };
       }
@@ -199,6 +228,11 @@ export const ToolResponseCard = ({ content }: { content: string | ChartData }) =
       {/* Portfolio Snapshot (Aligned List) */}
       {toolName === "Portfolio Snapshot" && Array.isArray(mainContent) && (
         <PortfolioUI data={mainContent as PortfolioRow[]} />
+      )}
+
+      {/* Contact List (Aligned List) */}
+      {toolName === "Contact" && Array.isArray(mainContent) && (
+        <ContactUI data={mainContent as Contact[]} />
       )}
 
       {/* Markdown/Text */}
