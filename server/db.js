@@ -1,11 +1,6 @@
 // db.js
 import mongoose from 'mongoose';
 
-const MONGODB_URI = process.env.MONGO_URI;
-
-if (!MONGODB_URI) {
-  throw new Error('MONGO_URI environment variable is not set');
-}
 
 // Cache connection for serverless environments
 let cached = global._mongoose;
@@ -14,6 +9,9 @@ if (!cached) {
 }
 
 export async function connectToDatabase() {
+  const MONGODB_URI = process.env.MONGO_URI;
+  if (!MONGODB_URI) throw new Error('MONGO_URI environment variable is not set');
+
   if (cached.conn) {
     console.log('Using cached MongoDB connection');
     return cached.conn;
@@ -31,7 +29,7 @@ export async function connectToDatabase() {
         return mongoose;
       })
       .catch((err) => {
-        console.error('❌ MongoDB connection failed:', err);
+        cached.promise = null; // allow retry on next request
         throw err;
       });
   }

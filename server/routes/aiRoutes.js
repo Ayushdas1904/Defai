@@ -444,7 +444,8 @@ router.post('/prompt', async (req, res) => {
     }
 
   } catch (error) {
-    res.write(`data: ${JSON.stringify({ type: 'error', content: 'Gemini API error.' })}\n\n`);
+    console.error('Gemini API error:', error);
+    res.write(`data: ${JSON.stringify({ type: 'error', content: `Gemini API error: ${error.message}` })}\n\n`);
   } finally {
     res.end();
   }
