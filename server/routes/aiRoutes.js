@@ -202,7 +202,7 @@ router.post('/prompt', async (req, res) => {
   res.flushHeaders();
 
   try {
-    const modelVersion = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const modelVersion = process.env.GEMINI_MODEL || 'gemini-4-hydrogen';
     const model = genAI.getGenerativeModel({
       model: modelVersion,
       tools,
